@@ -1,0 +1,36 @@
+{
+  "name": "long-downturn-game",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A multiplayer historical family survival game for facilitated group play.",
+  "dependencies": {
+    "@vercel/blob": "^2.4.0",
+    "express": "^4.21.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-scripts": "5.0.1"
+  },
+  "devDependencies": {
+    "@craco/craco": "^7.1.0"
+  },
+  "scripts": {
+    "start": "craco start",
+    "build": "craco build",
+    "test": "craco test",
+    "playtest:server": "node scripts/playtest-server.js",
+    "playtest:local": "node scripts/local-smoke.js"
+  },
+  "browserslist": {
+    "production": [
+      "last 2 Chrome versions",
+      "last 2 Firefox versions",
+      "last 2 Safari versions",
+      "last 2 Edge versions"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}
