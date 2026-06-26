@@ -857,7 +857,6 @@ function App() {
                 <div className="gd-news">
                   <p className="gd-kicker">Public News</p>
                   {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
-                  <h2>{phase.news}</h2>
                 </div>
 
                 {activePlayer?.employmentShock?.phaseId === phase.id && (
@@ -953,7 +952,6 @@ function RecoveryInterlude({ phase, view, isBusy, onAdvance }) {
       <div className="gd-news final-news">
         <p className="gd-kicker">Public News</p>
         {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
-        <h2>{phase.news}</h2>
       </div>
       <div className="gd-panel recovery-transition">
         <p className="gd-kicker">Recovery Phase Complete</p>
