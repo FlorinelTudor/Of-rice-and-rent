@@ -21,6 +21,28 @@ const FAMILY_PORTRAITS = {
   Kowalski: "family-kowalski-mining.png",
   Martinez: "family-martinez-seasonal.png",
 };
+const SCENARIO_OPTIONS = [
+  {
+    id: "easy_credit",
+    title: "Easy Credit",
+    detail: "Installment plans and loans feel unusually tempting. Early comfort is easier, but debt pressure bites harder later.",
+  },
+  {
+    id: "harsh_winter",
+    title: "Harsh Winter",
+    detail: "Food and health pressure hit harder. Mutual aid and cash cushions become more valuable.",
+  },
+  {
+    id: "bank_panic",
+    title: "Bank Panic",
+    detail: "Bank confidence is fragile. Cash, trust, and timing matter more than usual.",
+  },
+  {
+    id: "relief_politics",
+    title: "Relief Politics",
+    detail: "Public help is stronger, but access is uneven and reputation matters more.",
+  },
+];
 
 const phases = [
   {
@@ -314,6 +336,9 @@ function scoreFamily(family) {
   const reputationBonus = ((family.reputation ?? 50) - 50) * 0.22;
   const exploitPenalty = (family.exploitMarkers || 0) * 5;
   const gameOverPenalty = family.gameOver ? 25 : 0;
+  const rushedPenalty = (family.rushedChoiceCount || 0) * 2;
+  const patternPenalty = family.patternPenalty || 0;
+  const communityMemoryPenalty = (family.communityMemoryHits || 0) * 3;
   const dangerMeters = ["minFood", "minHealth", "minHope", "minEducation", "minStability", "minSavings"];
   const dangerPenalty = dangerMeters.reduce((sum, key) => {
     const value = family[key] ?? 100;
@@ -323,7 +348,30 @@ function scoreFamily(family) {
     return sum;
   }, 0);
   const resilienceBonus = dangerPenalty === 0 ? 6 : 0;
-  return clamp(core - debtPenalty - dangerPenalty - exploitPenalty - gameOverPenalty + reputationBonus + resilienceBonus + objectiveResult(family).bonus);
+  return clamp(
+    core -
+      debtPenalty -
+      dangerPenalty -
+      exploitPenalty -
+      gameOverPenalty -
+      rushedPenalty -
+      patternPenalty -
+      communityMemoryPenalty +
+      reputationBonus +
+      resilienceBonus +
+      objectiveResult(family).bonus
+  );
+}
+
+function scoreNotes(family) {
+  const notes = [];
+  if ((family.rushedChoiceCount || 0) > 0) notes.push(`${family.rushedChoiceCount} rushed`);
+  if ((family.patternPenalty || 0) > 0) notes.push(`${family.patternPenalty} pattern penalty`);
+  if ((family.communityMemoryHits || 0) > 0) notes.push(`${family.communityMemoryHits} trust exclusion`);
+  if ((family.exploitMarkers || 0) > 0) notes.push(`${family.exploitMarkers} exploit markers`);
+  if (family.gameOver) notes.push("collapse penalty");
+  if (objectiveResult(family).completed) notes.push("+10 objective");
+  return notes;
 }
 
 function flattenChoices(family) {
@@ -536,6 +584,7 @@ function App() {
   const [shared, setShared] = useState(savedGame.shared || null);
   const [scenario, setScenario] = useState(savedGame.scenario || null);
   const [rematchScenario, setRematchScenario] = useState(savedGame.rematchScenario || null);
+  const [selectedScenarioId, setSelectedScenarioId] = useState(savedGame.selectedScenarioId || "easy_credit");
   const [phaseIndex, setPhaseIndex] = useState(savedGame.phaseIndex || 0);
   const [playerName, setPlayerName] = useState(savedGame.playerName || "");
   const [activePlayerId, setActivePlayerId] = useState(savedGame.activePlayerId || "");
@@ -623,6 +672,7 @@ function App() {
         shared,
         scenario,
         rematchScenario,
+        selectedScenarioId,
         phaseIndex,
         playerName,
         activePlayerId,
@@ -631,7 +681,7 @@ function App() {
         joinClientId: joinClientIdRef.current,
       })
     );
-  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt]);
+  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, selectedScenarioId, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt]);
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
@@ -714,13 +764,18 @@ function App() {
     };
   }, [roomCode, view]);
 
-  async function createHostRoom() {
-    const data = await runGameRequest(() => gameApi("/game/rooms", { method: "POST", body: JSON.stringify({}) }));
+  useEffect(() => {
+    if (rematchScenario?.id) setSelectedScenarioId(rematchScenario.id);
+  }, [rematchScenario?.id]);
+
+  async function createHostRoom(scenarioId = selectedScenarioId) {
+    const data = await runGameRequest(() => gameApi("/game/rooms", { method: "POST", body: JSON.stringify({ scenario_id: scenarioId }) }));
     if (!data) return;
     syncRoom(data.room);
     setHostToken(data.hostToken || "");
     setActivePlayerId("");
     setSelected([]);
+    setSelectedScenarioId(data.room?.scenario?.id || scenarioId);
     setView("host");
   }
 
@@ -818,7 +873,7 @@ function App() {
         <div className="gd-room">Room {roomCode || "not started"}</div>
       </section>
       {apiError && <div className="gd-alert">{apiError}</div>}
-      {activePrivateNotice && (
+      {activePrivateNotice && !phaseRevealVisible && (
         <PrivateNoticeModal notice={activePrivateNotice} onDismiss={dismissPrivateNotice} />
       )}
 
@@ -834,9 +889,16 @@ function App() {
                 Join with a room code, receive a random family, and choose two actions each round as public news changes the
                 economy around you. Your food, health, savings, debt, hope, and education shape your final score.
               </p>
-              <div className="gd-actions">
+                {canCreateHost && (
+                  <ScenarioPicker
+                    selectedScenarioId={selectedScenarioId}
+                    onSelect={setSelectedScenarioId}
+                    compact
+                  />
+                )}
+                <div className="gd-actions">
                 {canCreateHost ? (
-                  <button onClick={createHostRoom} disabled={isBusy}>{isBusy ? "Creating..." : "Create host room"}</button>
+                  <button onClick={() => createHostRoom()} disabled={isBusy}>{isBusy ? "Creating..." : "Create host room"}</button>
                 ) : (
                   <button onClick={showJoinScreen}>Join as player</button>
                 )}
@@ -876,19 +938,33 @@ function App() {
         ].filter(Boolean).join(" ")}>
           <div className="gd-main">
             {isResultsPhase ? (
-              <ResultsPhase players={scoredPlayers} shared={shared} scenario={scenario} rematchScenario={rematchScenario} />
+              <ResultsPhase
+                players={scoredPlayers}
+                shared={shared}
+                scenario={scenario}
+                rematchScenario={rematchScenario}
+                view={view}
+                isBusy={isBusy}
+                selectedScenarioId={selectedScenarioId}
+                onSelectScenario={setSelectedScenarioId}
+                onCreateScenario={createHostRoom}
+              />
             ) : (
               <>
-                <div className="gd-market">
-                  <p className="gd-kicker">Market Conditions - {phase.years}</p>
-                  <img src={asset(phase.image)} alt={phase.title} />
-                  <p>{phase.summary}</p>
-                </div>
+                {!isRecoveryPhase && (
+                  <>
+                    <div className="gd-market">
+                      <p className="gd-kicker">Market Conditions - {phase.years}</p>
+                      <img src={asset(phase.image)} alt={phase.title} />
+                      <p>{phase.summary}</p>
+                    </div>
 
-                <div className="gd-news">
-                  <p className="gd-kicker">Public News</p>
-                  {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
-                </div>
+                    <div className="gd-news">
+                      <p className="gd-kicker">Public News</p>
+                      {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
+                    </div>
+                  </>
+                )}
 
                 {activePlayer?.gameOver ? (
                   <FamilyGameOver family={activePlayer} />
@@ -984,6 +1060,27 @@ function PrivateNoticeModal({ notice, onDismiss }) {
   );
 }
 
+function ScenarioPicker({ selectedScenarioId, onSelect, compact = false }) {
+  return (
+    <div className={compact ? "scenario-picker compact" : "scenario-picker"}>
+      <p className="gd-kicker">Scenario</p>
+      <div className="scenario-choice-grid">
+        {SCENARIO_OPTIONS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={option.id === selectedScenarioId ? "selected" : ""}
+            onClick={() => onSelect(option.id)}
+          >
+            <strong>{option.title}</strong>
+            <span>{option.detail}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function RecoveryInterlude({ phase, view, isBusy, onAdvance }) {
   return (
     <div className="final-phase">
@@ -1034,9 +1131,10 @@ function FamilyGameOver({ family }) {
   );
 }
 
-function ResultsPhase({ players, shared, scenario, rematchScenario }) {
+function ResultsPhase({ players, shared, scenario, rematchScenario, view, isBusy, selectedScenarioId, onSelectScenario, onCreateScenario }) {
   const awards = computeAwards(players, scenario);
   const debrief = historicalDebrief(players, shared);
+  const selectedScenario = SCENARIO_OPTIONS.find((option) => option.id === selectedScenarioId) || SCENARIO_OPTIONS[0];
   return (
     <div className="results-phase">
       <section className="results-hero">
@@ -1062,7 +1160,7 @@ function ResultsPhase({ players, shared, scenario, rematchScenario }) {
           {players.map((player, index) => (
             <LeaderboardRow player={player} index={index} key={player.id} />
           ))}
-          <p className="gd-note">Scores include danger penalties, debt, trust reputation, exploit markers, and a +10 family objective bonus.</p>
+          <p className="gd-note">Scores include danger penalties, debt, trust reputation, exploit markers, rushed decisions, repeated-pattern penalties, community memory, and family objectives.</p>
         </div>
 
         <div className="gd-panel results-awards">
@@ -1090,14 +1188,17 @@ function ResultsPhase({ players, shared, scenario, rematchScenario }) {
             <p key={takeaway}>{takeaway}</p>
           ))}
         </div>
-        {rematchScenario && (
-          <div className="rematch-panel results-rematch">
-            <p className="gd-kicker">Next Table Challenge</p>
-            <h3>{rematchScenario.title}</h3>
-            <p>{rematchScenario.detail}</p>
-            <small>{rematchScenario.rematchPrompt}</small>
-          </div>
-        )}
+        <div className="rematch-panel results-rematch">
+          <p className="gd-kicker">Next Table Challenge</p>
+          <h3>Choose the next scenario</h3>
+          {rematchScenario && <small>Suggested next: {rematchScenario.title}. The host can override it.</small>}
+          <ScenarioPicker selectedScenarioId={selectedScenarioId} onSelect={onSelectScenario} />
+          {view === "host" && (
+            <button onClick={() => onCreateScenario(selectedScenario.id)} disabled={isBusy}>
+              {isBusy ? "Creating..." : `Create next run: ${selectedScenario.title}`}
+            </button>
+          )}
+        </div>
       </section>
     </div>
   );
@@ -1271,7 +1372,7 @@ function Leaderboard({ players, shared, scenario, rematchScenario }) {
       {players.map((player, index) => (
         <LeaderboardRow player={player} index={index} key={player.id} />
       ))}
-      <p className="gd-note">Scores include danger penalties, debt, trust reputation, exploit markers, and a +10 family objective bonus.</p>
+      <p className="gd-note">Scores include danger penalties, debt, trust reputation, exploit markers, rushed decisions, repeated-pattern penalties, community memory, and family objectives.</p>
       <div className="award-grid">
         {awards.map((award) => (
           <div className={award.primary ? "award-card primary" : "award-card"} key={award.id}>
@@ -1305,6 +1406,7 @@ function Leaderboard({ players, shared, scenario, rematchScenario }) {
 
 function LeaderboardRow({ player, index }) {
   const objective = objectiveResult(player);
+  const notes = scoreNotes(player);
   return (
     <div className="leader-row" key={player.id}>
       <b>{index + 1}</b>
@@ -1315,6 +1417,7 @@ function LeaderboardRow({ player, index }) {
         {player.objectiveTitle && (
           <small>{objective.completed ? "+10" : "0"} objective: {player.objectiveTitle}</small>
         )}
+        {!!notes.length && <small className="score-notes">{notes.join(" · ")}</small>}
       </span>
       <strong>{player.score}</strong>
     </div>

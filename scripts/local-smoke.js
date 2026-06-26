@@ -94,8 +94,16 @@ async function assertHardBetrayal(baseUrl) {
   }
 }
 
+async function assertScenarioSelection(baseUrl) {
+  const created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({ scenario_id: "bank_panic" }) });
+  if (created.room.scenario?.id !== "bank_panic") {
+    throw new Error(`Expected host-selected Bank Panic scenario, got ${created.room.scenario?.id || "none"}`);
+  }
+}
+
 async function main() {
   const baseUrl = getBaseUrl();
+  await assertScenarioSelection(baseUrl);
   await assertHardBetrayal(baseUrl);
   const { roomCode, hostToken } = await createFullRoom(baseUrl, "Local Player");
 

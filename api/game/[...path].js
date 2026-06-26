@@ -6,6 +6,8 @@ const MIN_THINKING_TIME_MS = 7000;
 const BETRAYAL_POT_DRAIN = 3;
 const BETRAYAL_EXPLOIT_MARKERS = 2;
 const BETRAYAL_REPUTATION_HIT = -24;
+const REPEAT_CHOICE_LIMIT = 2;
+const PATTERN_CHOICE_LIMIT = 4;
 const UNEMPLOYMENT_SHOCK_PHASE = "deepening";
 const COLLAPSE_REASONS = {
   health: {
@@ -232,6 +234,29 @@ const ACTION_DYNAMICS = {
   inform_on_black_market: ["betray"],
 };
 
+function choicePattern(choice) {
+  if (["take_store_credit", "buy_radio_credit", "borrow_to_invest"].includes(choice)) return "credit";
+  if (["invest_stocks", "sell_stocks_now", "withdraw_bank_cash"].includes(choice)) return "speculation";
+  if (["cut_food_rent", "sell_possessions", "pawn_heirloom", "delay_medical_care"].includes(choice)) return "austerity";
+  if (["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"].includes(choice)) return "mobility";
+  if (ACTION_DYNAMICS[choice]?.includes("betray")) return "betrayal";
+  if (ACTION_DYNAMICS[choice]?.includes("cooperate")) return "community";
+  if (ACTION_DYNAMICS[choice]?.includes("relief")) return "relief";
+  if (ACTION_DYNAMICS[choice]?.includes("work")) return "work";
+  if (["night_school", "fund_training", "keep_children_school"].includes(choice)) return "skills";
+  return "household";
+}
+
+function antiGamingMultiplier(family, choices) {
+  const repeatCounts = family.choiceRepeatCounts || {};
+  const patternCounts = family.choicePatternCounts || {};
+  const hasRepeatedChoice = choices.some((choice) => (repeatCounts[choice] || 0) >= REPEAT_CHOICE_LIMIT);
+  const hasRepeatedPattern = choices.some((choice) => (patternCounts[choicePattern(choice)] || 0) >= PATTERN_CHOICE_LIMIT);
+  if (hasRepeatedChoice && hasRepeatedPattern) return 0.65;
+  if (hasRepeatedChoice || hasRepeatedPattern) return 0.8;
+  return 1;
+}
+
 const PHASE_PRESSURE = {
   postwar: { work: 0.7, relief: 0.2, need: 0.55 },
   recession_1921: { work: 0.45, relief: 0.25, need: 0.7 },
@@ -403,8 +428,26 @@ function pickFamily(playerName, index, clientId) {
 
 function applyChoices(family, choices, phaseId, options = {}) {
   const next = { ...family, choices: { ...(family.choices || {}) } };
-  const multiplier = positiveImpactMultiplier(family, options.rushed);
+  const patternMultiplier = antiGamingMultiplier(family, choices);
+  const multiplier = positiveImpactMultiplier(family, options.rushed) * patternMultiplier;
+  next.choiceRepeatCounts = { ...(family.choiceRepeatCounts || {}) };
+  next.choicePatternCounts = { ...(family.choicePatternCounts || {}) };
   choices.forEach((choice) => {
+    const pattern = choicePattern(choice);
+    next.choiceRepeatCounts[choice] = (next.choiceRepeatCounts[choice] || 0) + 1;
+    next.choicePatternCounts[pattern] = (next.choicePatternCounts[pattern] || 0) + 1;
+    if (next.choiceRepeatCounts[choice] > REPEAT_CHOICE_LIMIT) {
+      next.patternPenalty = (next.patternPenalty || 0) + 2;
+      next.hope = clamp((next.hope || 0) - 2);
+    }
+    if (next.choicePatternCounts[pattern] > PATTERN_CHOICE_LIMIT) {
+      next.patternPenalty = (next.patternPenalty || 0) + 3;
+      next.stability = clamp((next.stability || 0) - 2);
+    }
+    if (pattern === "betrayal" && next.choicePatternCounts[pattern] > 1) {
+      next.exploitMarkers = (next.exploitMarkers || 0) + 1;
+      next.reputation = clampReputation((next.reputation ?? 50) - 6);
+    }
     Object.entries(IMPACTS[choice] || {}).forEach(([key, value]) => {
       const impact = scaledImpact(key, value, multiplier);
       const current = next[key] || 0;
@@ -428,6 +471,7 @@ function applyChoices(family, choices, phaseId, options = {}) {
   next.rushedChoiceCount = (next.rushedChoiceCount || 0) + (options.rushed ? 1 : 0);
   next.lastChoiceRushed = Boolean(options.rushed);
   next.lastChoiceMultiplier = multiplier;
+  next.lastPatternLimited = patternMultiplier < 1;
   return next;
 }
 
@@ -670,7 +714,17 @@ function resolveSharedRound(room, phaseId) {
         stability: -3,
       });
     }
-    next = applySharedImpact(next, potMetNeed ? { food: 4, hope: 5, stability: 3 } : { food: -4, hope: -8, stability: -7 });
+    if (potMetNeed) {
+      const excludedFromTrust = choiceHasTag(choices, "betray") || (next.exploitMarkers || 0) >= 4 || (next.reputation ?? 50) < 20;
+      if (excludedFromTrust) {
+        next = applySharedImpact(next, { food: 1, hope: -2 });
+        next.communityMemoryHits = (next.communityMemoryHits || 0) + 1;
+      } else {
+        next = applySharedImpact(next, { food: 4, hope: 5, stability: 3 });
+      }
+    } else {
+      next = applySharedImpact(next, { food: -4, hope: -8, stability: -7 });
+    }
     return next;
   });
 
@@ -890,11 +944,11 @@ async function saveRoom(room) {
   await writeJson(roomPath(room.room_code), roomPayload);
 }
 
-async function createRoom() {
+async function createRoom(scenarioId) {
   for (let i = 0; i < 12; i += 1) {
     const code = roomCode();
     const now = new Date().toISOString();
-    const scenario = scenarioForRoom(code);
+    const scenario = scenarioId ? scenarioById(scenarioId) : scenarioForRoom(code);
     const room = {
       room_code: code,
       host_token: crypto.randomBytes(32).toString("base64url"),
@@ -952,7 +1006,8 @@ async function handleGameRequest(req, res) {
   if (parts[0] !== "rooms") return json(res, 404, { detail: "Not found" });
 
   if (req.method === "POST" && parts.length === 1) {
-    const room = await createRoom();
+    const body = getBody(req);
+    const room = await createRoom(body.scenario_id);
     if (!room) return json(res, 500, { detail: "Could not create a unique room code" });
     return json(res, 200, { room: publicRoom(room), hostToken: room.host_token });
   }
