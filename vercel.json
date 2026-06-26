@@ -1,18 +1,8 @@
 {
-  "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "build"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "https://approx-marking-mpegs-stays.trycloudflare.com/$1"
+      "source": "/(.*)",
+      "destination": "/api/tunnel?path=$1"
     }
   ],
   "buildCommand": "PUBLIC_URL= npm run build",
