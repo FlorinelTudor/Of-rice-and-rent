@@ -9,6 +9,7 @@ const BETRAYAL_CHOICES = new Set(["hoard_relief", "undercut_wages", "inform_on_b
 const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market"]);
 const WORK_OR_RELIEF_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "accept_relief", "seek_charity_clinic", "hoard_relief"]);
 const MOBILITY_CHOICES = new Set(["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"]);
+const SKILL_CHOICES = new Set(["night_school", "fund_training"]);
 const FAMILY_PORTRAITS = {
   Carter: "family-carter-factory.png",
   Rosen: "family-rosen-shopkeepers.png",
@@ -338,18 +339,40 @@ function objectiveResult(family) {
   const choices = flattenChoices(family);
   const usedMigrationPath = choices.some((choice) => MOBILITY_CHOICES.has(choice));
   const workReliefCount = countChoices(family, WORK_OR_RELIEF_CHOICES);
+  const mobilityWorkCount = countChoices(family, new Set([...MOBILITY_CHOICES, ...WORK_OR_RELIEF_CHOICES]));
   const communityCount = countChoices(family, COOPERATIVE_CHOICES);
+  const skillCount = countChoices(family, SKILL_CHOICES);
   const trust = family.reputation ?? 50;
-  const completed =
-    (family.objectiveId === "industrial_stability" && family.stability >= 60 && trust >= 45) ||
-    (family.objectiveId === "shopkeeper_debt" && family.debt <= 45 && family.hope >= 45) ||
-    (family.objectiveId === "tenant_food" && (family.food >= 50 || usedMigrationPath)) ||
-    (family.objectiveId === "immigrant_trust" && (trust >= 65 || family.education >= 60)) ||
-    (family.objectiveId === "railroad_mobility" && workReliefCount >= 2 && family.health >= 45) ||
-    (family.objectiveId === "garment_solidarity" && communityCount >= 2 && family.hope >= 55) ||
-    (family.objectiveId === "service_respect" && family.stability >= 50 && trust >= 60) ||
-    (family.objectiveId === "miner_health" && family.health >= 45 && family.debt <= 55) ||
-    (family.objectiveId === "seasonal_work" && family.food >= 45 && workReliefCount >= 2);
+  const objectiveChecks = {
+    industrial_stability: family.stability >= 60 && trust >= 45,
+    industrial_emergency_fund: family.savings >= 50 && family.debt <= 55,
+    industrial_skill_path: family.education >= 65 || skillCount >= 1,
+    shopkeeper_debt: family.debt <= 45 && family.hope >= 45,
+    shopkeeper_trust: trust >= 65 && family.debt <= 60,
+    shopkeeper_cash: family.savings >= 55,
+    tenant_food: family.food >= 50 || usedMigrationPath,
+    tenant_health: family.health >= 55 && family.food >= 45,
+    tenant_mobility: mobilityWorkCount >= 2 && family.hope >= 45,
+    immigrant_trust: trust >= 65 || family.education >= 60,
+    immigrant_schooling: family.education >= 68,
+    immigrant_savings: family.savings >= 45 && family.stability >= 50,
+    railroad_mobility: workReliefCount >= 2 && family.health >= 45,
+    railroad_health: family.health >= 58,
+    railroad_cash: family.savings >= 50 && family.stability >= 50,
+    garment_solidarity: communityCount >= 2 && family.hope >= 55,
+    garment_education: family.education >= 65 && family.hope >= 45,
+    garment_trust: trust >= 65,
+    service_respect: family.stability >= 50 && trust >= 60,
+    service_schooling: family.education >= 62 && family.hope >= 45,
+    service_stability: family.stability >= 58,
+    miner_health: family.health >= 45 && family.debt <= 55,
+    miner_union: communityCount >= 2 && trust >= 55,
+    miner_food: family.food >= 55,
+    seasonal_work: family.food >= 45 && workReliefCount >= 2,
+    seasonal_mobility: mobilityWorkCount >= 2 && family.stability >= 40,
+    seasonal_health: family.health >= 55 && family.food >= 45,
+  };
+  const completed = Boolean(objectiveChecks[family.objectiveId]);
   return { completed, bonus: completed ? 10 : 0 };
 }
 
@@ -376,8 +399,35 @@ function awardWinner(players, scoreMap, selector, usedIds = new Set()) {
   return [...pool].sort((a, b) => selector(b, scoreMap.get(b.id)) - selector(a, scoreMap.get(a.id)) || (scoreMap.get(b.id) || 0) - (scoreMap.get(a.id) || 0))[0];
 }
 
-function computeAwards(players) {
+function computeAwards(players, scenario) {
   if (!players.length) return [];
+  const scenarioAwards = {
+    easy_credit: {
+      gamble: "Credit Tightrope Walker",
+      steady: "Paid In Cash, Slept At Night",
+      gambleDetail: "Used risky opportunity without letting debt fully own the ending.",
+      steadyDetail: "Resisted easy money and kept the family from severe lows.",
+    },
+    harsh_winter: {
+      hardest: "Bean Counter With A Blanket",
+      steady: "Kept The Stove Lit",
+      hardestDetail: "Did the most with the least room for comfort.",
+      steadyDetail: "Protected the family from the harshest food, health, and hope lows.",
+    },
+    bank_panic: {
+      anchor: "Trust Fund Without The Fund",
+      gamble: "Vault Door Philosopher",
+      anchorDetail: "Kept trust strongest when institutional confidence was shaky.",
+      gambleDetail: "Made the boldest bank, cash, and risk calls while staying alive.",
+    },
+    relief_politics: {
+      anchor: "Town Hall Diplomat",
+      hardest: "Relief Line Strategist",
+      anchorDetail: "Used cooperation and reputation best when public help was contested.",
+      hardestDetail: "Navigated scarcity and public help from a tough starting point.",
+    },
+  };
+  const variant = scenarioAwards[scenario?.id] || {};
   const scored = players.map((player) => ({ ...player, score: scoreFamily(player) })).sort((a, b) => b.score - a.score);
   const scoreMap = new Map(scored.map((player) => [player.id, player.score]));
   const mostResilient = scored[0];
@@ -397,10 +447,10 @@ function computeAwards(players) {
   const steadyHand = awardWinner(players, scoreMap, (player) => lowestRecordedMeter(player) - (player.exploitMarkers || 0) * 10 - (player.rushedChoiceCount || 0) * 3, usedIds);
   return [
     { id: "resilient", title: "Most Resilient Family", player: mostResilient, detail: "Highest final resilience score across meters, debt, trust, and danger penalties.", primary: true },
-    { id: "anchor", title: "Community Anchor", player: communityAnchor, detail: "Best record of cooperation, trust, and low exploitation." },
-    { id: "hardest", title: "Hardest Road", player: hardestRoad, detail: "Strongest finish from the toughest family position." },
-    { id: "gamble", title: "Boldest Gamble", player: boldestGamble, detail: "Took the biggest strategic risks while staying in the race." },
-    { id: "steady", title: "Steady Hand", player: steadyHand, detail: "Kept the family out of danger with the fewest severe lows." },
+    { id: "anchor", title: variant.anchor || "Community Anchor", player: communityAnchor, detail: variant.anchorDetail || "Best record of cooperation, trust, and low exploitation." },
+    { id: "hardest", title: variant.hardest || "Hardest Road", player: hardestRoad, detail: variant.hardestDetail || "Strongest finish from the toughest family position." },
+    { id: "gamble", title: variant.gamble || "Boldest Gamble", player: boldestGamble, detail: variant.gambleDetail || "Took the biggest strategic risks while staying in the race." },
+    { id: "steady", title: variant.steady || "Steady Hand", player: steadyHand, detail: variant.steadyDetail || "Kept the family out of danger with the fewest severe lows." },
   ].filter((award) => award.player);
 }
 
@@ -470,11 +520,17 @@ async function gameApi(path, options = {}) {
 
 function App() {
   const savedGame = useMemo(() => loadSavedGame(), []);
+  const canCreateHost = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).has("newHost");
+  }, []);
   const [view, setView] = useState(savedGame.view || "start");
   const [roomCode, setRoomCode] = useState(savedGame.roomCode || "");
   const [hostToken, setHostToken] = useState(savedGame.hostToken || "");
   const [players, setPlayers] = useState(savedGame.players || []);
   const [shared, setShared] = useState(savedGame.shared || null);
+  const [scenario, setScenario] = useState(savedGame.scenario || null);
+  const [rematchScenario, setRematchScenario] = useState(savedGame.rematchScenario || null);
   const [phaseIndex, setPhaseIndex] = useState(savedGame.phaseIndex || 0);
   const [playerName, setPlayerName] = useState(savedGame.playerName || "");
   const [activePlayerId, setActivePlayerId] = useState(savedGame.activePlayerId || "");
@@ -483,6 +539,7 @@ function App() {
   const [isBusy, setIsBusy] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState(savedGame.lastSyncedAt || 0);
   const [phaseRevealVisible, setPhaseRevealVisible] = useState(false);
+  const viewRef = useRef(savedGame.view || "start");
   const joinClientIdRef = useRef(savedGame.joinClientId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
   const phase = phases[phaseIndex] || phases[0];
@@ -503,11 +560,42 @@ function App() {
   const rushedChoiceWarning = activePlayer?.lastChoiceRushed;
 
   useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
+  useEffect(() => {
+    const handleBackFromJoin = () => {
+      if (viewRef.current !== "join") return;
+      setView("start");
+      setRoomCode("");
+      setSelected([]);
+      setApiError("");
+    };
+    window.addEventListener("popstate", handleBackFromJoin);
+    return () => window.removeEventListener("popstate", handleBackFromJoin);
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem(
       "gd-game-state",
-      JSON.stringify({ version: GAME_STATE_VERSION, view, roomCode, hostToken, players, shared, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt, joinClientId: joinClientIdRef.current })
+      JSON.stringify({
+        version: GAME_STATE_VERSION,
+        view,
+        roomCode,
+        hostToken,
+        players,
+        shared,
+        scenario,
+        rematchScenario,
+        phaseIndex,
+        playerName,
+        activePlayerId,
+        selected,
+        lastSyncedAt,
+        joinClientId: joinClientIdRef.current,
+      })
     );
-  }, [view, roomCode, hostToken, players, shared, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt]);
+  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt]);
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
@@ -522,6 +610,8 @@ function App() {
     setRoomCode(room.roomCode);
     setPlayers(room.players || []);
     setShared(room.shared || null);
+    setScenario(room.scenario || null);
+    setRematchScenario(room.rematchScenario || null);
     setPhaseIndex(room.phaseIndex || 0);
     setLastSyncedAt(Date.now());
   }
@@ -532,6 +622,8 @@ function App() {
     setHostToken("");
     setPlayers([]);
     setShared(null);
+    setScenario(null);
+    setRematchScenario(null);
     setPhaseIndex(0);
     setActivePlayerId("");
     setSelected([]);
@@ -589,6 +681,18 @@ function App() {
     setActivePlayerId("");
     setSelected([]);
     setView("host");
+  }
+
+  function showJoinScreen() {
+    window.history.pushState({ gdView: "join" }, "", window.location.href);
+    setView("join");
+  }
+
+  function returnToStart() {
+    setView("start");
+    setRoomCode("");
+    setSelected([]);
+    setApiError("");
   }
 
   async function joinRoom() {
@@ -663,7 +767,7 @@ function App() {
       <section className="gd-topbar">
         <div>
           <p className="gd-kicker">Main Street, 1919</p>
-          <h1>American Promise Survival Game</h1>
+          <h1>Rent, Beans and Dreams</h1>
         </div>
         <div className="gd-room">Room {roomCode || "not started"}</div>
       </section>
@@ -675,14 +779,18 @@ function App() {
             <img src={asset("login-hero.png")} alt="" />
             <div>
               <p className="gd-kicker">1919-1942 multiplayer learning game</p>
-              <h2>Chase the American Promise.</h2>
+              <h2>“The chief business of the American people is business.”</h2>
+              <p className="quote-source">Calvin Coolidge, 1925</p>
               <p>
                 Join with a room code, receive a random family, and choose two actions each round as public news changes the
                 economy around you. Your food, health, savings, debt, hope, and education shape your final score.
               </p>
               <div className="gd-actions">
-                <button onClick={createHostRoom} disabled={isBusy}>{isBusy ? "Creating..." : "Create host room"}</button>
-                <button className="secondary" onClick={() => setView("join")}>Join as player</button>
+                {canCreateHost ? (
+                  <button onClick={createHostRoom} disabled={isBusy}>{isBusy ? "Creating..." : "Create host room"}</button>
+                ) : (
+                  <button onClick={showJoinScreen}>Join as player</button>
+                )}
               </div>
             </div>
           </div>
@@ -694,7 +802,10 @@ function App() {
           <h2>Join a room</h2>
           <input value={roomCode} onChange={(e) => setRoomCode(e.target.value.toUpperCase())} placeholder="Room code" />
           <input value={playerName} onChange={(e) => setPlayerName(e.target.value)} placeholder="Your name" />
-          <button onClick={joinRoom} disabled={isBusy}>{isBusy ? "Joining..." : "Get family profile"}</button>
+          <div className="gd-join-actions">
+            <button className="secondary" onClick={returnToStart} disabled={isBusy}>Back to start</button>
+            <button onClick={joinRoom} disabled={isBusy}>{isBusy ? "Joining..." : "Get family profile"}</button>
+          </div>
         </section>
       )}
 
@@ -770,13 +881,14 @@ function App() {
                 </div>
               </div>
             ) : (
-              <Leaderboard players={scoredPlayers} shared={shared} />
+              <Leaderboard players={scoredPlayers} shared={shared} scenario={scenario} rematchScenario={rematchScenario} />
             )}
           </div>
 
           <aside className="gd-sidebar">
             <FamilyCard family={activePlayer} />
             {activePlayer && <Meters family={activePlayer} />}
+            <ScenarioPanel scenario={scenario} shared={shared} />
             <CommunityPanel shared={shared} />
             <PolicyPanel shared={shared} />
             <Conditions conditions={phase.conditions} />
@@ -890,6 +1002,38 @@ function CommunityPanel({ shared }) {
   );
 }
 
+function ScenarioPanel({ scenario, shared }) {
+  const event = shared?.eventVariant;
+  const scenarioEvent = shared?.scenarioEvent;
+  if (!scenario && !event && !scenarioEvent) return null;
+  return (
+    <div className="gd-panel scenario-panel">
+      <p className="gd-kicker">Table Scenario</p>
+      {scenario && (
+        <div className="scenario-entry primary">
+          <span>Room variant</span>
+          <strong>{scenario.title}</strong>
+          <p>{scenario.detail}</p>
+        </div>
+      )}
+      {event && (
+        <div className="scenario-entry">
+          <span>This phase</span>
+          <strong>{event.title}</strong>
+          <p>{event.detail}</p>
+        </div>
+      )}
+      {scenarioEvent && (
+        <div className="scenario-entry">
+          <span>Scenario pressure</span>
+          <strong>{scenarioEvent.title}</strong>
+          <p>{scenarioEvent.detail}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PolicyPanel({ shared }) {
   const policy = shared?.activePolicy;
   const shock = shared?.lastShock;
@@ -931,8 +1075,8 @@ function Conditions({ conditions }) {
   );
 }
 
-function Leaderboard({ players, shared }) {
-  const awards = computeAwards(players);
+function Leaderboard({ players, shared, scenario, rematchScenario }) {
+  const awards = computeAwards(players, scenario);
   const debrief = historicalDebrief(players, shared);
   return (
     <div className="gd-panel leaderboard">
@@ -964,6 +1108,14 @@ function Leaderboard({ players, shared }) {
           </div>
         ))}
       </div>
+      {rematchScenario && (
+        <div className="rematch-panel">
+          <p className="gd-kicker">Next Table Challenge</p>
+          <h3>{rematchScenario.title}</h3>
+          <p>{rematchScenario.detail}</p>
+          <small>{rematchScenario.rematchPrompt}</small>
+        </div>
+      )}
       <div className="debrief-panel">
         <p className="gd-kicker">Historical Debrief</p>
         <h3>What this room experienced</h3>

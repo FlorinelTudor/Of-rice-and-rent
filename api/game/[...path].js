@@ -21,6 +21,128 @@ const PHASE_IDS = [
   "recovery",
 ];
 
+const SCENARIOS = [
+  {
+    id: "easy_credit",
+    title: "Easy Credit",
+    detail: "Installment plans and loans feel unusually tempting. Early comfort is easier, but debt pressure bites harder later.",
+    rematchPrompt: "Try Harsh Winter next if the table thinks easy money was too kind.",
+  },
+  {
+    id: "harsh_winter",
+    title: "Harsh Winter",
+    detail: "Food and health pressure hit harder. Mutual aid and cash cushions become more valuable.",
+    rematchPrompt: "Try Bank Panic next for a run where trust in institutions matters more.",
+  },
+  {
+    id: "bank_panic",
+    title: "Bank Panic",
+    detail: "Bank confidence is fragile. Cash, trust, and timing matter more than usual.",
+    rematchPrompt: "Try Relief Politics next for a run about contested public help.",
+  },
+  {
+    id: "relief_politics",
+    title: "Relief Politics",
+    detail: "Public help is stronger, but access is uneven and reputation matters more.",
+    rematchPrompt: "Try Easy Credit next for a run where early optimism is dangerous.",
+  },
+];
+
+const EVENT_VARIANTS = {
+  postwar: [
+    { id: "demobilized_workers", title: "Demobilized workers crowd hiring lines", detail: "Work competition rises as soldiers and wartime workers return." },
+    { id: "price_swings", title: "Prices swing week to week", detail: "Families feel uncertainty before anyone knows whether prosperity will hold." },
+  ],
+  recession_1921: [
+    { id: "factory_orders_fall", title: "Factory orders fall sharply", detail: "Short hours force families to choose between cash and stability." },
+    { id: "local_credit_tightens", title: "Local credit tightens", detail: "Store credit remains possible, but debt becomes harder to ignore." },
+  ],
+  early_boom: [
+    { id: "installment_boom", title: "Installment buying spreads", detail: "Modern comforts feel newly reachable for families willing to borrow." },
+    { id: "night_school_growth", title: "Night schools advertise opportunity", detail: "Skill-building becomes a tempting path out of fragile work." },
+  ],
+  speculation: [
+    { id: "broker_tips", title: "Broker tips reach Main Street", detail: "Speculation sounds less like gambling and more like common sense." },
+    { id: "consumer_credit_pitch", title: "Salesmen push easy terms", detail: "Comfort now competes with resilience later." },
+  ],
+  crash: [
+    { id: "margin_calls", title: "Margin calls hit households", detail: "Families exposed to stocks must decide what to salvage." },
+    { id: "bank_whispers", title: "Bank whispers spread", detail: "Fear travels faster than facts." },
+  ],
+  deepening: [
+    { id: "winter_relief_lines", title: "Winter relief lines lengthen", detail: "Private charity and local aid cannot cover everyone." },
+    { id: "rent_pressure", title: "Rent pressure grows", detail: "Keeping a roof overhead competes with food, health, and schooling." },
+  ],
+  bank_holiday: [
+    { id: "reopened_banks", title: "Reopened banks test public trust", detail: "Federal action steadies some families but not every household." },
+    { id: "first_relief_forms", title: "Relief forms arrive", detail: "Help expands, but pride and access still shape who benefits." },
+  ],
+  work_relief: [
+    { id: "road_crews", title: "Road crews hire locally", detail: "Public work creates wages, but not enough slots for every family." },
+    { id: "relief_board_choices", title: "Relief boards make hard choices", detail: "Reputation and need both matter." },
+  ],
+  second: [
+    { id: "relief_cutback", title: "Relief cutbacks worry families", detail: "A fragile recovery stumbles and the room has to adjust." },
+    { id: "jobless_rise_again", title: "Jobless rolls rise again", detail: "Families learn that recovery can reverse." },
+  ],
+  defense_shift: [
+    { id: "new_orders", title: "New factory orders arrive", detail: "Industrial households see a path forward, if they can reach it." },
+    { id: "training_posts", title: "Training notices appear", detail: "Skills and mobility matter as factories change." },
+  ],
+  recovery: [
+    { id: "hiring_surge", title: "Hiring surges unevenly", detail: "The long crisis eases, but family outcomes remain unequal." },
+    { id: "new_beginnings", title: "Families count what survived", detail: "Savings, health, schooling, and trust tell different stories." },
+  ],
+};
+
+const OBJECTIVE_VARIANTS = {
+  industrial_stability: [
+    { id: "industrial_stability", theme: "Stability", title: "Hold the household together", detail: "Finish with Stability 60+ while keeping trust at 45+." },
+    { id: "industrial_emergency_fund", theme: "Emergency fund", title: "Build a factory-family cushion", detail: "Finish with Savings 50+ and Debt 55 or lower." },
+    { id: "industrial_skill_path", theme: "Skills", title: "Turn work into advancement", detail: "Finish with Education 65+ or choose a skills action at least once." },
+  ],
+  shopkeeper_debt: [
+    { id: "shopkeeper_debt", theme: "Solvency", title: "Keep the shop solvent", detail: "Finish with Debt 45 or lower and Hope 45+." },
+    { id: "shopkeeper_trust", theme: "Customer trust", title: "Keep Main Street loyal", detail: "Finish with Trust 65+ and Debt 60 or lower." },
+    { id: "shopkeeper_cash", theme: "Cash drawer", title: "Protect the cash drawer", detail: "Finish with Savings 55+." },
+  ],
+  tenant_food: [
+    { id: "tenant_food", theme: "Food", title: "Keep food on the table", detail: "Finish with Food 50+ or successfully use a migration/work-camp path." },
+    { id: "tenant_health", theme: "Health", title: "Keep the family healthy", detail: "Finish with Health 55+ and Food 45+." },
+    { id: "tenant_mobility", theme: "Mobility", title: "Find a better route", detail: "Use at least 2 mobility or work actions and finish with Hope 45+." },
+  ],
+  immigrant_trust: [
+    { id: "immigrant_trust", theme: "Standing", title: "Build standing", detail: "Finish with Trust 65+ or Education 60+." },
+    { id: "immigrant_schooling", theme: "Schooling", title: "Make education the bridge", detail: "Finish with Education 68+." },
+    { id: "immigrant_savings", theme: "Security", title: "Build security in a new city", detail: "Finish with Savings 45+ and Stability 50+." },
+  ],
+  railroad_mobility: [
+    { id: "railroad_mobility", theme: "Mobility", title: "Keep moving, stay healthy", detail: "Use at least 2 work or mobility actions and finish with Health 45+." },
+    { id: "railroad_health", theme: "Health", title: "Avoid being broken by the rails", detail: "Finish with Health 58+." },
+    { id: "railroad_cash", theme: "Pay envelope", title: "Keep the pay envelope coming", detail: "Finish with Savings 50+ and Stability 50+." },
+  ],
+  garment_solidarity: [
+    { id: "garment_solidarity", theme: "Solidarity", title: "Stand with the neighborhood", detail: "Use at least 2 community/labor actions and finish with Hope 55+." },
+    { id: "garment_education", theme: "Next generation", title: "Protect the next generation", detail: "Finish with Education 65+ and Hope 45+." },
+    { id: "garment_trust", theme: "Shop-floor trust", title: "Become a trusted organizer", detail: "Finish with Trust 65+." },
+  ],
+  service_respect: [
+    { id: "service_respect", theme: "Respect", title: "Earn respect under pressure", detail: "Finish with Stability 50+ and Trust 60+." },
+    { id: "service_schooling", theme: "Schooling", title: "Keep school within reach", detail: "Finish with Education 62+ and Hope 45+." },
+    { id: "service_stability", theme: "Stable home", title: "Hold a stable home base", detail: "Finish with Stability 58+." },
+  ],
+  miner_health: [
+    { id: "miner_health", theme: "Health", title: "Survive dangerous work", detail: "Finish with Health 45+ and Debt 55 or lower." },
+    { id: "miner_union", theme: "Solidarity", title: "Lean on the coal town", detail: "Use at least 2 community/labor actions and finish with Trust 55+." },
+    { id: "miner_food", theme: "Food", title: "Keep the pantry stocked", detail: "Finish with Food 55+." },
+  ],
+  seasonal_work: [
+    { id: "seasonal_work", theme: "Work", title: "Find enough work", detail: "Finish with Food 45+ and use at least 2 work or relief actions." },
+    { id: "seasonal_mobility", theme: "Mobility", title: "Follow the harvest", detail: "Use at least 2 mobility/work actions and finish with Stability 40+." },
+    { id: "seasonal_health", theme: "Health", title: "End the season standing", detail: "Finish with Health 55+ and Food 45+." },
+  ],
+};
+
 const IMPACTS = {
   keep_factory_job: { food: 6, savings: 9, hope: -5, stability: 16 },
   use_savings_food: { food: 18, health: 9, savings: -17 },
@@ -156,6 +278,36 @@ function clampReputation(value) {
   return Math.max(-30, Math.min(100, Math.round(value)));
 }
 
+function hashIndex(seed, length) {
+  if (!length) return 0;
+  return crypto.createHash("sha256").update(seed).digest().readUInt32BE(0) % length;
+}
+
+function scenarioById(id) {
+  return SCENARIOS.find((scenario) => scenario.id === id) || SCENARIOS[0];
+}
+
+function scenarioForRoom(code) {
+  return SCENARIOS[hashIndex(code, SCENARIOS.length)];
+}
+
+function rematchScenario(currentScenarioId) {
+  const currentIndex = SCENARIOS.findIndex((scenario) => scenario.id === currentScenarioId);
+  return SCENARIOS[(Math.max(0, currentIndex) + 1) % SCENARIOS.length];
+}
+
+function eventVariantForRoom(room, phaseId) {
+  const variants = EVENT_VARIANTS[phaseId] || [];
+  if (!variants.length) return null;
+  return variants[hashIndex(`${room.room_code}:${room.scenario_id || "standard"}:${phaseId}`, variants.length)];
+}
+
+function objectiveVariantForFamily(family, index, clientId) {
+  const variants = OBJECTIVE_VARIANTS[family.objectiveId] || [];
+  if (!variants.length) return null;
+  return variants[hashIndex(`${family.name}:${clientId || ""}:${index}`, variants.length)];
+}
+
 function positiveImpactMultiplier(family, rushed) {
   if (!rushed) return 1;
   return Math.max(0.55, 0.85 - (family.rushedChoiceCount || 0) * 0.1);
@@ -184,10 +336,13 @@ function roomCode() {
 
 function publicRoom(room) {
   const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
+  const scenario = scenarioById(room.scenario_id);
   return {
     roomCode: room.room_code,
     phaseIndex: room.phase_index,
     players: room.players || [],
+    scenario,
+    rematchScenario: room.phase_index >= PHASE_IDS.length - 1 ? rematchScenario(scenario.id) : null,
     shared: sharedSnapshot(room, phaseId),
     updatedAt: room.updated_at,
   };
@@ -195,12 +350,22 @@ function publicRoom(room) {
 
 function pickFamily(playerName, index, clientId) {
   const family = { ...STARTING_FAMILIES[index % STARTING_FAMILIES.length] };
+  const objective = objectiveVariantForFamily(family, index, clientId);
+  if (objective) {
+    family.baseObjectiveId = family.objectiveId;
+    family.objectiveId = objective.id;
+    family.objectiveVariantId = objective.id;
+    family.objectiveTheme = objective.theme;
+    family.objectiveTitle = objective.title;
+    family.objectiveDetail = objective.detail;
+  }
   Object.assign(family, {
     id: crypto.randomUUID(),
     playerName,
     clientId: clientId || crypto.randomUUID(),
     choices: {},
     score: 0,
+    slot: index,
     reputation: 50,
     exploitMarkers: 0,
   });
@@ -242,13 +407,25 @@ function applyChoices(family, choices, phaseId, options = {}) {
   return next;
 }
 
-function phaseCapacity(phaseId, playerCount) {
+function phaseCapacity(phaseId, playerCount, scenarioId = "easy_credit") {
   const pressure = PHASE_PRESSURE[phaseId] || PHASE_PRESSURE.postwar;
-  return {
+  const capacity = {
     workSlots: Math.max(1, Math.round(playerCount * pressure.work)),
     reliefSlots: Math.max(1, Math.round(playerCount * pressure.relief)),
     communityNeed: Math.max(2, Math.ceil(playerCount * pressure.need)),
   };
+  if (scenarioId === "easy_credit" && (phaseId === "early_boom" || phaseId === "speculation")) {
+    capacity.workSlots += 1;
+    capacity.communityNeed = Math.max(2, capacity.communityNeed - 1);
+  }
+  if (scenarioId === "easy_credit" && (phaseId === "crash" || phaseId === "deepening")) capacity.communityNeed += 1;
+  if (scenarioId === "harsh_winter" && (phaseId === "deepening" || phaseId === "bank_holiday")) capacity.communityNeed += 1;
+  if (scenarioId === "bank_panic" && (phaseId === "crash" || phaseId === "bank_holiday")) capacity.communityNeed += 1;
+  if (scenarioId === "relief_politics" && (phaseId === "bank_holiday" || phaseId === "work_relief")) {
+    capacity.reliefSlots += 1;
+    capacity.communityNeed = Math.max(2, capacity.communityNeed - 1);
+  }
+  return capacity;
 }
 
 function choiceHasTag(choices, tag) {
@@ -288,6 +465,17 @@ function applyPolicyEffect(family, phaseId) {
   return addPolicyHistory(next, { ...policy, phaseId });
 }
 
+function scenarioPhaseImpact(scenarioId, phaseId) {
+  if (scenarioId === "easy_credit" && phaseId === "speculation") return { hope: 5, debt: 7 };
+  if (scenarioId === "easy_credit" && phaseId === "crash") return { debt: 8, hope: -5, stability: -4 };
+  if (scenarioId === "harsh_winter" && phaseId === "deepening") return { food: -8, health: -5, hope: -3 };
+  if (scenarioId === "bank_panic" && phaseId === "crash") return { bankTrust: -18, stability: -5 };
+  if (scenarioId === "bank_panic" && phaseId === "bank_holiday") return { bankTrust: 8, hope: 3 };
+  if (scenarioId === "relief_politics" && phaseId === "work_relief") return { food: 5, hope: 4, reputation: 3 };
+  if (scenarioId === "relief_politics" && phaseId === "second") return { hope: -5, stability: -3 };
+  return null;
+}
+
 function shockScore(room, player, phaseId) {
   return crypto.createHash("sha256").update(`${room.room_code}:${phaseId}:${player.id}`).digest().readUInt32BE(0);
 }
@@ -295,7 +483,7 @@ function shockScore(room, player, phaseId) {
 function applyUnemploymentShock(room, phaseId) {
   if (phaseId !== UNEMPLOYMENT_SHOCK_PHASE || !room.players.length) return;
   const shockCount = Math.max(1, Math.round(room.players.length * 0.25));
-  const capacity = phaseCapacity(phaseId, room.players.length);
+  const capacity = phaseCapacity(phaseId, room.players.length, room.scenario_id);
   const communityCushion = (room.shared?.communityPot ?? 0) >= capacity.communityNeed;
   const selected = [...room.players]
     .sort((a, b) => shockScore(room, a, phaseId) - shockScore(room, b, phaseId))
@@ -344,6 +532,20 @@ function applyPhaseEntryEvents(room, phaseId) {
       activePolicy: { id: policy.id, title: policy.title, detail: policy.detail, phaseId },
     };
   }
+  const scenarioImpact = scenarioPhaseImpact(room.scenario_id, phaseId);
+  if (scenarioImpact) {
+    const scenario = scenarioById(room.scenario_id);
+    room.players = room.players.map((player) => applySharedImpact(player, scenarioImpact));
+    room.shared = {
+      ...(room.shared || {}),
+      scenarioEvent: {
+        id: `${scenario.id}_${phaseId}`,
+        title: scenario.title,
+        detail: scenario.detail,
+        phaseId,
+      },
+    };
+  }
   applyUnemploymentShock(room, phaseId);
   room.entry_events[phaseId] = true;
 }
@@ -363,7 +565,9 @@ function sharedSnapshot(room, phaseId) {
     lastRound: room.shared?.lastRound || "No shared decision has resolved yet.",
     activePolicy: room.shared?.activePolicy || null,
     lastShock: room.shared?.lastShock || null,
-    ...phaseCapacity(phaseId, playerCount),
+    scenarioEvent: room.shared?.scenarioEvent || null,
+    eventVariant: eventVariantForRoom(room, phaseId),
+    ...phaseCapacity(phaseId, playerCount, room.scenario_id),
   };
 }
 
@@ -371,7 +575,7 @@ function resolveSharedRound(room, phaseId) {
   room.resolved_phases = room.resolved_phases || {};
   if (room.resolved_phases[phaseId]) return;
 
-  const capacity = phaseCapacity(phaseId, room.players.length);
+  const capacity = phaseCapacity(phaseId, room.players.length, room.scenario_id);
   const round = room.players.map((player) => ({
     player,
     choices: player.choices?.[phaseId] || [],
@@ -622,9 +826,11 @@ async function createRoom() {
   for (let i = 0; i < 12; i += 1) {
     const code = roomCode();
     const now = new Date().toISOString();
+    const scenario = scenarioForRoom(code);
     const room = {
       room_code: code,
       host_token: crypto.randomBytes(32).toString("base64url"),
+      scenario_id: scenario.id,
       phase_index: 0,
       created_at: now,
       phase_started_at: now,

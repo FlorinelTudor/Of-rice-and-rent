@@ -110,6 +110,15 @@ async function main() {
   if (state.room.players.some((player) => !player.role || !player.objectiveId || !player.objectiveTitle)) {
     throw new Error("Expected every player to receive a period role and family objective");
   }
+  if (!state.room.scenario?.id || !state.room.scenario?.title) {
+    throw new Error("Expected every room to include a replay scenario card");
+  }
+  if (!state.room.shared?.eventVariant?.id) {
+    throw new Error("Expected every phase to expose a replayable event variant");
+  }
+  if (state.room.players.some((player) => !player.objectiveVariantId || !player.objectiveTheme)) {
+    throw new Error("Expected every player to receive a rotating objective variant");
+  }
 
   for (let round = 0; round < phaseChoices.length; round += 1) {
     const choices = phaseChoices[round];
@@ -149,6 +158,9 @@ async function main() {
         throw new Error("Expected every family to record the 1933 banking policy effect");
       }
     }
+  }
+  if (!state.room.rematchScenario?.id || state.room.rematchScenario.id === state.room.scenario.id) {
+    throw new Error("Expected final room state to recommend a different rematch scenario");
   }
 
   console.log(`Local smoke passed: room ${roomCode}, ${MAX_PLAYERS} players, final phase ${state.room.phaseIndex}.`);

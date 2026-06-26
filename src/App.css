@@ -130,6 +130,13 @@
   font-size: 17px;
 }
 
+.gd-hero .quote-source {
+  margin-top: 10px;
+  color: var(--gd-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
 .gd-actions {
   display: flex;
   flex-wrap: wrap;
@@ -208,6 +215,16 @@
   background: var(--gd-surface);
   color: var(--gd-ink);
   font: inherit;
+}
+
+.gd-join-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.gd-join-actions button {
+  flex: 1 1 180px;
 }
 
 .gd-grid {
@@ -514,6 +531,46 @@
   font-size: 14px;
 }
 
+.scenario-panel {
+  display: grid;
+  gap: 10px;
+  border-color: #d9d0bf;
+  background: #fffdf8;
+}
+
+.scenario-entry {
+  padding: 12px;
+  border: 1px solid #e4dbc9;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.scenario-entry.primary {
+  background: #f8f3e9;
+}
+
+.scenario-entry span {
+  display: block;
+  margin-bottom: 5px;
+  color: #84652f;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.scenario-entry strong {
+  display: block;
+  color: var(--gd-ink);
+  line-height: 1.18;
+}
+
+.scenario-entry p {
+  margin: 6px 0 0;
+  color: var(--gd-muted);
+  font-size: 14px;
+}
+
 .policy-panel {
   display: grid;
   gap: 10px;
@@ -784,6 +841,29 @@
 }
 
 .debrief-panel p:not(.gd-kicker) {
+  margin: 0;
+  color: var(--gd-muted);
+}
+
+.rematch-panel {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 16px;
+  border: 1px solid #d9c28c;
+  border-radius: 8px;
+  background: #fff8e7;
+}
+
+.rematch-panel h3 {
+  margin: 0;
+  color: var(--gd-ink);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.rematch-panel p,
+.rematch-panel small {
   margin: 0;
   color: var(--gd-muted);
 }
