@@ -333,6 +333,48 @@
   box-shadow: inset 0 0 0 2px #111111;
 }
 
+.gd-choice-grid button.choice-cooperate {
+  border-color: rgba(36, 114, 75, .42);
+  background: linear-gradient(180deg, #f4fbf5 0%, #e4f3e8 100%);
+  color: #143522;
+}
+
+.gd-choice-grid button.choice-cooperate span {
+  background: #d5ecd9;
+  color: #1f6844;
+}
+
+.gd-choice-grid button.choice-cooperate em {
+  color: #3f6f53;
+}
+
+.gd-choice-grid button.choice-betray {
+  border-color: rgba(173, 59, 50, .48);
+  background: linear-gradient(180deg, #fff4f2 0%, #f5d9d5 100%);
+  color: #491b17;
+}
+
+.gd-choice-grid button.choice-betray span {
+  background: #efd0cb;
+  color: #963228;
+}
+
+.gd-choice-grid button.choice-betray em {
+  color: #7d4a44;
+}
+
+.gd-choice-grid button.choice-cooperate.selected {
+  border-color: #24724b;
+  background: #e0f4e5;
+  box-shadow: inset 0 0 0 2px #24724b, 0 12px 24px rgba(36, 114, 75, .18);
+}
+
+.gd-choice-grid button.choice-betray.selected {
+  border-color: #ad3b32;
+  background: #f6d5cf;
+  box-shadow: inset 0 0 0 2px #ad3b32, 0 12px 24px rgba(173, 59, 50, .2);
+}
+
 .gd-submit {
   margin-top: 16px;
 }

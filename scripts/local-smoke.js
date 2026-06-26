@@ -47,8 +47,7 @@ async function request(baseUrl, path, options = {}) {
   return payload;
 }
 
-async function main() {
-  const baseUrl = getBaseUrl();
+async function createFullRoom(baseUrl, prefix) {
   const created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({}) });
   const roomCode = created.room.roomCode;
   const stamp = Date.now();
@@ -58,12 +57,47 @@ async function main() {
       request(baseUrl, `/rooms/${roomCode}/join`, {
         method: "POST",
         body: JSON.stringify({
-          player_name: `Local Player ${index + 1}`,
-          client_id: `local-smoke-${stamp}-${index}`,
+          player_name: `${prefix} ${index + 1}`,
+          client_id: `${prefix.toLowerCase().replace(/\s+/g, "-")}-${stamp}-${index}`,
         }),
       })
     )
   );
+
+  return roomCode;
+}
+
+async function assertHardBetrayal(baseUrl) {
+  const roomCode = await createFullRoom(baseUrl, "Betrayal Probe");
+  let state = await request(baseUrl, `/rooms/${roomCode}`);
+  const betrayer = state.room.players[0];
+
+  await Promise.all(
+    state.room.players.map((player, index) =>
+      request(baseUrl, `/rooms/${roomCode}/choices`, {
+        method: "POST",
+        body: JSON.stringify({
+          player_id: player.id,
+          choices: index === 0 ? ["keep_factory_job", "hoard_relief"] : ["keep_factory_job", "contribute_community_pot"],
+        }),
+      })
+    )
+  );
+
+  state = await request(baseUrl, `/rooms/${roomCode}`);
+  const updatedBetrayer = state.room.players.find((player) => player.id === betrayer.id);
+  if ((updatedBetrayer.exploitMarkers || 0) < 2) {
+    throw new Error(`Expected hard betrayal to apply at least 2 exploit markers, got ${updatedBetrayer.exploitMarkers || 0}`);
+  }
+  if ((updatedBetrayer.reputation ?? 50) > 20) {
+    throw new Error(`Expected hard betrayal to sharply damage trust, got ${updatedBetrayer.reputation}`);
+  }
+}
+
+async function main() {
+  const baseUrl = getBaseUrl();
+  await assertHardBetrayal(baseUrl);
+  const roomCode = await createFullRoom(baseUrl, "Local Player");
 
   let state = await request(baseUrl, `/rooms/${roomCode}`);
   const families = state.room.players.map((player) => player.name);
@@ -94,6 +128,9 @@ async function main() {
     }
     if (!state.room.shared || typeof state.room.shared.trust !== "number") {
       throw new Error("Expected shared community state after choices resolved");
+    }
+    if (round === 1 && state.room.shared.last?.potMetNeed) {
+      throw new Error("Expected hard betrayal to collapse the community pot when every player takes a selfish edge");
     }
   }
 

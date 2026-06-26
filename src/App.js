@@ -5,6 +5,7 @@ const asset = (name) => `${process.env.PUBLIC_URL || ""}/depression-game/${name}
 const MAX_PLAYERS = 9;
 const GAME_STATE_VERSION = "blob-multiplayer-v2";
 const COOPERATIVE_CHOICES = new Set(["join_mutual_aid", "organize_neighbors", "support_union", "sponsor_neighbor", "contribute_community_pot"]);
+const BETRAYAL_CHOICES = new Set(["hoard_relief", "undercut_wages", "inform_on_black_market"]);
 const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market"]);
 const WORK_OR_RELIEF_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "accept_relief", "seek_charity_clinic", "hoard_relief"]);
 const MOBILITY_CHOICES = new Set(["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"]);
@@ -308,6 +309,12 @@ function countChoices(family, choiceSet) {
   return flattenChoices(family).filter((choice) => choiceSet.has(choice)).length;
 }
 
+function choiceTone(choiceId) {
+  if (choiceId === "contribute_community_pot" || COOPERATIVE_CHOICES.has(choiceId)) return "cooperate";
+  if (BETRAYAL_CHOICES.has(choiceId)) return "betray";
+  return "neutral";
+}
+
 function objectiveResult(family) {
   const choices = flattenChoices(family);
   const usedMigrationPath = choices.some((choice) => MOBILITY_CHOICES.has(choice));
@@ -391,7 +398,7 @@ function historicalDebrief(players, shared) {
     `${workReliefCount} work or relief choices were made. Scarce opportunities helped, but they could not remove pressure for everyone.`,
     cooperationCount >= exploitCount
       ? "Cooperation was a meaningful strategy: shared support improved trust and helped families absorb shocks."
-      : "Soft betrayal paid in the short term, but exploit markers and lower trust made selfish survival more costly at the end.",
+      : "Hard betrayal paid in the short term, but exploit markers and lower trust made selfish survival more costly at the end.",
     dangerCount
       ? `${dangerCount} families hit a danger zone on at least one meter, showing how quickly food, health, savings, hope, schooling, or stability could become fragile.`
       : "No family crossed a severe danger threshold, which means the room collectively managed risk unusually well.",
@@ -716,7 +723,14 @@ function App() {
                   <p className="gd-kicker">Choose 2 Actions</p>
                   <div className="gd-choice-grid">
                     {activeChoices.map(([id, title, detail], index) => (
-                      <button key={id} className={selected.includes(id) ? "selected" : ""} onClick={() => toggleChoice(id)}>
+                      <button
+                        key={id}
+                        className={[
+                          selected.includes(id) ? "selected" : "",
+                          `choice-${choiceTone(id)}`,
+                        ].filter(Boolean).join(" ")}
+                        onClick={() => toggleChoice(id)}
+                      >
                         <span>{String.fromCharCode(65 + index)}</span>
                         <strong>{title}</strong>
                         <em>{detail}</em>

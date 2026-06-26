@@ -4,6 +4,9 @@ const path = require("path");
 
 const MAX_PLAYERS = 9;
 const MIN_THINKING_TIME_MS = 7000;
+const BETRAYAL_POT_DRAIN = 3;
+const BETRAYAL_EXPLOIT_MARKERS = 2;
+const BETRAYAL_REPUTATION_HIT = -24;
 const PORT = Number(process.env.PORT || 4173);
 const PHASE_IDS = [
   "postwar",
@@ -262,7 +265,7 @@ function resolveSharedRound(room, phaseId) {
   const betray = round.filter((entry) => choiceHasTag(entry.choices, "betray"));
   const workWinners = resolveScarcity(work, capacity.workSlots);
   const reliefWinners = resolveScarcity(relief, capacity.reliefSlots);
-  const communityPot = Math.max(0, (room.shared?.communityPot ?? 3) + cooperate.length * 2 - betray.length);
+  const communityPot = Math.max(0, (room.shared?.communityPot ?? 3) + cooperate.length * 2 - betray.length * BETRAYAL_POT_DRAIN);
   const potMetNeed = communityPot >= capacity.communityNeed;
 
   room.players = room.players.map((player) => {
@@ -271,16 +274,23 @@ function resolveSharedRound(room, phaseId) {
     if (choiceHasTag(choices, "work") && !workWinners.has(player.id)) next = applySharedImpact(next, { savings: -8, hope: -5 });
     if (choiceHasTag(choices, "relief") && !reliefWinners.has(player.id)) next = applySharedImpact(next, { food: -7, hope: -4 });
     if (choiceHasTag(choices, "cooperate")) next = applySharedImpact(next, { reputation: 5 });
-    if (choiceHasTag(choices, "betray")) next = applySharedImpact(next, { reputation: -8, exploitMarkers: 1 });
-    next = applySharedImpact(next, potMetNeed ? { food: 4, hope: 5, stability: 3 } : { hope: -5, stability: -4 });
+    if (choiceHasTag(choices, "betray")) {
+      next = applySharedImpact(next, {
+        reputation: BETRAYAL_REPUTATION_HIT,
+        exploitMarkers: BETRAYAL_EXPLOIT_MARKERS,
+        hope: -4,
+        stability: -3,
+      });
+    }
+    next = applySharedImpact(next, potMetNeed ? { food: 4, hope: 5, stability: 3 } : { food: -4, hope: -8, stability: -7 });
     return next;
   });
 
-  const trustDelta = cooperate.length * 4 - betray.length * 9 + (potMetNeed ? 4 : -5) - Math.max(0, work.length - capacity.workSlots) * 2;
+  const trustDelta = cooperate.length * 4 - betray.length * 18 + (potMetNeed ? 4 : -8) - Math.max(0, work.length - capacity.workSlots) * 2;
   room.shared = {
     trust: clamp((room.shared?.trust ?? 55) + trustDelta),
     communityPot: Math.max(0, communityPot - capacity.communityNeed),
-    lastRound: `${cooperate.length} helped the community, ${betray.length} took a selfish edge. ${
+    lastRound: `${cooperate.length} helped the community, ${betray.length} stole from the shared pool. ${
       potMetNeed ? "The community pot held." : "The pot fell short."
     }`,
     last: {
