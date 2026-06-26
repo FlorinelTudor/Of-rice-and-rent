@@ -215,7 +215,7 @@ const phases = [
     id: "recovery",
     years: "1941-1942",
     title: "Recovery and Mobilization",
-    image: "recovery-mobilization-market.png",
+    image: "final-recovery-market.png",
     newsImage: "news-recovery.png",
     news: "Factories hire as orders surge",
     summary: "The long crisis gives way to mobilization, though not every family recovers equally.",
@@ -822,66 +822,70 @@ function App() {
         )}
         <section className={`gd-grid ${phaseRevealVisible ? "phase-ui-hidden" : "phase-ui-visible"}`}>
           <div className="gd-main">
-            <div className="gd-market">
-              <p className="gd-kicker">Market Conditions - {phase.years}</p>
-              <img src={asset(phase.image)} alt={phase.title} />
-              <p>{phase.summary}</p>
-            </div>
-
-            <div className="gd-news">
-              <p className="gd-kicker">Public News</p>
-              {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
-              <h2>{phase.news}</h2>
-            </div>
-
-            {activePlayer?.employmentShock?.phaseId === phase.id && (
-              <div className="gd-panel employment-alert">
-                <p className="gd-kicker">Private Family Notice</p>
-                <h2>{activePlayer.employmentShock.title}</h2>
-                <p>{activePlayer.employmentShock.detail}</p>
-              </div>
-            )}
-
-            {activeChoices.length > 0 && submittedChoices.length > 0 ? (
-              <div className="gd-panel gd-submitted">
-                <p className="gd-kicker">Choices Submitted</p>
-                <h2>Ready for the next phase</h2>
-                <p>
-                  Your choices were applied to the family meters. The phase will move forward automatically once every
-                  player in the room has submitted, or the host can advance it manually.
-                </p>
-                {rushedChoiceWarning && <p className="gd-sync">Quick choices gave reduced positive gains this round.</p>}
-                <p className="gd-sync">Submitted {submittedCount}/{players.length}</p>
-                {view === "host" && <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>Advance now</button>}
-              </div>
-            ) : activeChoices.length > 0 ? (
-              <div className="gd-choices">
-                <img src={asset("new-deal-choice-background.png")} alt="" />
-                <div className="gd-choice-content">
-                  <p className="gd-kicker">Choose 2 Actions</p>
-                  <div className="gd-choice-grid">
-                    {activeChoices.map(([id, title, detail], index) => (
-                      <button
-                        key={id}
-                        className={[
-                          selected.includes(id) ? "selected" : "",
-                          `choice-${choiceTone(id)}`,
-                        ].filter(Boolean).join(" ")}
-                        onClick={() => toggleChoice(id)}
-                      >
-                        <span>{String.fromCharCode(65 + index)}</span>
-                        <strong>{title}</strong>
-                        <em>{detail}</em>
-                      </button>
-                    ))}
-                  </div>
-                  <button className="gd-submit" onClick={submitChoices} disabled={selected.length !== 2 || isBusy}>
-                    {isBusy ? "Submitting..." : "Submit choices"}
-                  </button>
-                </div>
-              </div>
+            {isFinalPhase ? (
+              <FinalPhase phase={phase} players={scoredPlayers} shared={shared} scenario={scenario} rematchScenario={rematchScenario} />
             ) : (
-              <Leaderboard players={scoredPlayers} shared={shared} scenario={scenario} rematchScenario={rematchScenario} />
+              <>
+                <div className="gd-market">
+                  <p className="gd-kicker">Market Conditions - {phase.years}</p>
+                  <img src={asset(phase.image)} alt={phase.title} />
+                  <p>{phase.summary}</p>
+                </div>
+
+                <div className="gd-news">
+                  <p className="gd-kicker">Public News</p>
+                  {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
+                  <h2>{phase.news}</h2>
+                </div>
+
+                {activePlayer?.employmentShock?.phaseId === phase.id && (
+                  <div className="gd-panel employment-alert">
+                    <p className="gd-kicker">Private Family Notice</p>
+                    <h2>{activePlayer.employmentShock.title}</h2>
+                    <p>{activePlayer.employmentShock.detail}</p>
+                  </div>
+                )}
+
+                {activeChoices.length > 0 && submittedChoices.length > 0 ? (
+                  <div className="gd-panel gd-submitted">
+                    <p className="gd-kicker">Choices Submitted</p>
+                    <h2>Ready for the next phase</h2>
+                    <p>
+                      Your choices were applied to the family meters. The phase will move forward automatically once every
+                      player in the room has submitted, or the host can advance it manually.
+                    </p>
+                    {rushedChoiceWarning && <p className="gd-sync">Quick choices gave reduced positive gains this round.</p>}
+                    <p className="gd-sync">Submitted {submittedCount}/{players.length}</p>
+                    {view === "host" && <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>Advance now</button>}
+                  </div>
+                ) : (
+                  <div className="gd-choices">
+                    <img src={asset("new-deal-choice-background.png")} alt="" />
+                    <div className="gd-choice-content">
+                      <p className="gd-kicker">Choose 2 Actions</p>
+                      <div className="gd-choice-grid">
+                        {activeChoices.map(([id, title, detail], index) => (
+                          <button
+                            key={id}
+                            className={[
+                              selected.includes(id) ? "selected" : "",
+                              `choice-${choiceTone(id)}`,
+                            ].filter(Boolean).join(" ")}
+                            onClick={() => toggleChoice(id)}
+                          >
+                            <span>{String.fromCharCode(65 + index)}</span>
+                            <strong>{title}</strong>
+                            <em>{detail}</em>
+                          </button>
+                        ))}
+                      </div>
+                      <button className="gd-submit" onClick={submitChoices} disabled={selected.length !== 2 || isBusy}>
+                        {isBusy ? "Submitting..." : "Submit choices"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -908,6 +912,27 @@ function App() {
         </>
       )}
     </main>
+  );
+}
+
+function FinalPhase({ phase, players, shared, scenario, rematchScenario }) {
+  return (
+    <div className="final-phase">
+      <div className="final-phase-hero">
+        <img src={asset(phase.image)} alt={phase.title} />
+        <div className="final-phase-copy">
+          <p className="gd-kicker">Final Phase - {phase.years}</p>
+          <h2>{phase.title}</h2>
+          <p>{phase.summary}</p>
+        </div>
+      </div>
+      <div className="gd-news final-news">
+        <p className="gd-kicker">Public News</p>
+        {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
+        <h2>{phase.news}</h2>
+      </div>
+      <Leaderboard players={players} shared={shared} scenario={scenario} rematchScenario={rematchScenario} />
+    </div>
   );
 }
 

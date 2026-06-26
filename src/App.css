@@ -272,6 +272,82 @@
   line-height: 1.05;
 }
 
+.final-phase {
+  display: grid;
+  gap: 18px;
+}
+
+.final-phase-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 360px;
+  border: 1px solid var(--gd-line);
+  border-radius: 8px;
+  background: #171614;
+  color: #fffefa;
+}
+
+.final-phase-hero img {
+  width: 100%;
+  height: 420px;
+  display: block;
+  object-fit: cover;
+}
+
+.final-phase-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(15, 14, 12, 0) 42%, rgba(15, 14, 12, .72) 100%);
+  pointer-events: none;
+}
+
+.final-phase-copy {
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  bottom: 22px;
+  z-index: 1;
+  max-width: 760px;
+}
+
+.final-phase-copy .gd-kicker {
+  color: rgba(255, 255, 255, .72);
+}
+
+.final-phase-copy h2 {
+  margin: 0 0 8px;
+  color: #ffffff;
+  font-size: clamp(30px, 4vw, 52px);
+  line-height: 1;
+}
+
+.final-phase-copy p:not(.gd-kicker) {
+  margin: 0;
+  color: rgba(255, 255, 255, .84);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.final-news {
+  display: grid;
+  grid-template-columns: minmax(180px, 300px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+}
+
+.final-news .gd-kicker {
+  grid-column: 1 / -1;
+}
+
+.final-news img {
+  max-height: 220px;
+}
+
+.final-news h2 {
+  margin: 0;
+}
+
 .gd-choices {
   position: relative;
   min-height: 430px;
@@ -1023,6 +1099,10 @@
   .gd-sidebar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .final-news {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 680px) {
@@ -1072,6 +1152,20 @@
 
   .gd-choice-grid button {
     min-height: 118px;
+  }
+
+  .final-phase-hero {
+    min-height: 300px;
+  }
+
+  .final-phase-hero img {
+    height: 320px;
+  }
+
+  .final-phase-copy {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
   }
 
   .winner-badge,
