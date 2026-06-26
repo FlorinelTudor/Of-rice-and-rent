@@ -1,8 +1,8 @@
 {
-  "routes": [
+  "rewrites": [
     {
-      "src": "/(.*)",
-      "dest": "https://approx-marking-mpegs-stays.trycloudflare.com/$1"
+      "source": "/(.*)",
+      "destination": "https://approx-marking-mpegs-stays.trycloudflare.com/$1"
     }
   ],
   "buildCommand": "PUBLIC_URL= npm run build",
