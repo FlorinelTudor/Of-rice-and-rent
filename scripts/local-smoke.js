@@ -1,5 +1,5 @@
 const DEFAULT_BASE_URL = "http://127.0.0.1:4173/api/game";
-const MAX_PLAYERS = 9;
+const MAX_PLAYERS = 8;
 
 const phaseChoices = [
   ["keep_factory_job", "contribute_community_pot"],
@@ -131,6 +131,23 @@ async function main() {
     }
     if (round === 1 && state.room.shared.last?.potMetNeed) {
       throw new Error("Expected hard betrayal to collapse the community pot when every player takes a selfish edge");
+    }
+    if (expectedPhase === 5) {
+      const jobLossCount = state.room.players.filter((player) => player.employmentShock?.phaseId === "deepening").length;
+      if (jobLossCount !== 2) {
+        throw new Error(`Expected the 25% unemployment shock to hit 2 of 8 families, got ${jobLossCount}`);
+      }
+      if (!state.room.shared.lastShock || state.room.shared.lastShock.count !== 2) {
+        throw new Error("Expected shared unemployment shock summary for the deepening phase");
+      }
+    }
+    if (expectedPhase === 6) {
+      if (state.room.shared.activePolicy?.id !== "emergency_banking_act") {
+        throw new Error("Expected the 1933 Emergency Banking Act policy to be active");
+      }
+      if (state.room.players.some((player) => !player.policyHistory?.some((policy) => policy.id === "emergency_banking_act"))) {
+        throw new Error("Expected every family to record the 1933 banking policy effect");
+      }
     }
   }
 

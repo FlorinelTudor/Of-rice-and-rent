@@ -2,13 +2,24 @@ import "@/App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const asset = (name) => `${process.env.PUBLIC_URL || ""}/depression-game/${name}`;
-const MAX_PLAYERS = 9;
+const MAX_PLAYERS = 8;
 const GAME_STATE_VERSION = "blob-multiplayer-v2";
 const COOPERATIVE_CHOICES = new Set(["join_mutual_aid", "organize_neighbors", "support_union", "sponsor_neighbor", "contribute_community_pot"]);
 const BETRAYAL_CHOICES = new Set(["hoard_relief", "undercut_wages", "inform_on_black_market"]);
 const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market"]);
 const WORK_OR_RELIEF_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "accept_relief", "seek_charity_clinic", "hoard_relief"]);
 const MOBILITY_CHOICES = new Set(["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"]);
+const FAMILY_PORTRAITS = {
+  Carter: "family-carter-factory.png",
+  Rosen: "family-rosen-shopkeepers.png",
+  Williams: "family-williams-farm.png",
+  Novak: "family-novak-immigrant.png",
+  "O'Connor": "family-oconnor-railroad.png",
+  Bianchi: "family-bianchi-garment.png",
+  Johnson: "family-johnson-service.png",
+  Kowalski: "family-kowalski-mining.png",
+  Martinez: "family-martinez-seasonal.png",
+};
 
 const phases = [
   {
@@ -251,12 +262,19 @@ const extremeChoiceRules = [
   },
 ];
 
-function getExtremeChoices(family) {
+function getExtremeChoices(family, phaseId) {
   if (!family) return [];
-  return extremeChoiceRules
+  const choices = extremeChoiceRules
     .filter((rule) => rule.when(family))
     .slice(0, 2)
     .map(({ id, title, detail }) => [id, title, detail]);
+  if (family.employmentShock?.phaseId === phaseId) {
+    choices.unshift(
+      ["accept_relief", "Apply for emergency relief", "Job loss: protect food and health, but take a pride cost."],
+      ["take_desperate_work", "Take desperate day work", "Job loss: gain food and cash, risk health and stability."]
+    );
+  }
+  return choices.slice(0, 3);
 }
 
 function familyImageFor(family) {
@@ -277,7 +295,8 @@ function familyImageFor(family) {
     family.minSavings,
   ].filter((value) => typeof value === "number");
   if (minHealth < 25) return "family-health-crisis.png";
-  return dangerValues.some((value) => value < 25) ? "family-danger-state.png" : "family-profile.png";
+  if (dangerValues.some((value) => value < 25)) return "family-danger-state.png";
+  return FAMILY_PORTRAITS[family.name] || "family-profile.png";
 }
 
 function clamp(value) {
@@ -474,7 +493,7 @@ function App() {
   const activeChoices = useMemo(() => {
     if (!phase.choices.length) return phase.choices;
     const existingChoiceIds = new Set(phase.choices.map(([id]) => id));
-    const extremeChoices = getExtremeChoices(activePlayer).filter(([id]) => !existingChoiceIds.has(id));
+    const extremeChoices = getExtremeChoices(activePlayer, phase.id).filter(([id]) => !existingChoiceIds.has(id));
     return [...phase.choices, ...extremeChoices];
   }, [activePlayer, phase]);
   const scoredPlayers = useMemo(
@@ -704,6 +723,14 @@ function App() {
               <h2>{phase.news}</h2>
             </div>
 
+            {activePlayer?.employmentShock?.phaseId === phase.id && (
+              <div className="gd-panel employment-alert">
+                <p className="gd-kicker">Private Family Notice</p>
+                <h2>{activePlayer.employmentShock.title}</h2>
+                <p>{activePlayer.employmentShock.detail}</p>
+              </div>
+            )}
+
             {activeChoices.length > 0 && submittedChoices.length > 0 ? (
               <div className="gd-panel gd-submitted">
                 <p className="gd-kicker">Choices Submitted</p>
@@ -751,6 +778,7 @@ function App() {
             <FamilyCard family={activePlayer} />
             {activePlayer && <Meters family={activePlayer} />}
             <CommunityPanel shared={shared} />
+            <PolicyPanel shared={shared} />
             <Conditions conditions={phase.conditions} />
             {view === "host" && (
               <div className="gd-panel">
@@ -782,11 +810,17 @@ function FamilyCard({ family }) {
       </div>
       <p className="gd-kicker">Family Profile</p>
       <h2>The {family.name} Family</h2>
-      <p>{family.playerName} - {family.profile}</p>
+      <p>{family.playerName}</p>
+      <div className="family-background">
+        <span>Family Background</span>
+        <strong>{family.role}</strong>
+        <p>{family.profile}</p>
+      </div>
       {family.objectiveTitle && (
         <div className="family-objective">
-          <strong>{family.role}</strong>
-          <p>{family.objectiveTitle}: {family.objectiveDetail}</p>
+          <span>Hidden Objective</span>
+          <strong>{family.objectiveTitle}</strong>
+          <p>{family.objectiveDetail}</p>
         </div>
       )}
     </div>
@@ -852,6 +886,31 @@ function CommunityPanel({ shared }) {
         </div>
       </div>
       <p className="community-last">{current.lastRound}</p>
+    </div>
+  );
+}
+
+function PolicyPanel({ shared }) {
+  const policy = shared?.activePolicy;
+  const shock = shared?.lastShock;
+  if (!policy && !shock) return null;
+  return (
+    <div className="gd-panel policy-panel">
+      <p className="gd-kicker">Government And Labor Shock</p>
+      {policy && (
+        <div className="policy-entry">
+          <span>Policy in effect</span>
+          <strong>{policy.title}</strong>
+          <p>{policy.detail}</p>
+        </div>
+      )}
+      {shock && (
+        <div className="policy-entry shock">
+          <span>{shock.title}</span>
+          <strong>{shock.count} families affected</strong>
+          <p>{shock.detail}</p>
+        </div>
+      )}
     </div>
   );
 }

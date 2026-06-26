@@ -1,11 +1,12 @@
 const crypto = require("crypto");
 const { BlobError, get, list, put } = require("@vercel/blob");
 
-const MAX_PLAYERS = 9;
+const MAX_PLAYERS = 8;
 const MIN_THINKING_TIME_MS = 7000;
 const BETRAYAL_POT_DRAIN = 3;
 const BETRAYAL_EXPLOIT_MARKERS = 2;
 const BETRAYAL_REPUTATION_HIT = -24;
+const UNEMPLOYMENT_SHOCK_PHASE = "deepening";
 const PHASE_IDS = [
   "postwar",
   "recession_1921",
@@ -98,6 +99,33 @@ const PHASE_PRESSURE = {
   second: { work: 0.5, relief: 0.45, need: 0.75 },
   defense_shift: { work: 0.75, relief: 0.35, need: 0.5 },
   recovery: { work: 0.9, relief: 0.3, need: 0.35 },
+};
+
+const POLICY_EFFECTS = {
+  bank_holiday: {
+    id: "emergency_banking_act",
+    title: "Emergency Banking Act and federal deposit insurance",
+    detail: "Banks reopen under federal oversight. Families regain some confidence in banks, though jobs remain scarce.",
+    impact: { bankTrust: 18, stability: 8, hope: 5 },
+  },
+  work_relief: {
+    id: "new_deal_work_relief",
+    title: "Public work relief expands",
+    detail: "New relief and work programs bring wages, food support, and cautious hope to many households.",
+    impact: { food: 6, savings: 7, hope: 8, stability: 4 },
+  },
+  second: {
+    id: "recovery_pullback",
+    title: "Relief pullback and renewed downturn",
+    detail: "A stumble in recovery makes jobs and relief feel less secure again.",
+    impact: { savings: -5, hope: -7, stability: -5 },
+  },
+  defense_shift: {
+    id: "defense_orders",
+    title: "Defense orders revive factories",
+    detail: "Government contracts begin lifting industrial demand and open new work paths.",
+    impact: { savings: 7, hope: 6, stability: 4 },
+  },
 };
 
 const STARTING_FAMILIES = [
@@ -244,6 +272,82 @@ function applySharedImpact(family, impact) {
   return next;
 }
 
+function addPolicyHistory(family, policy) {
+  const history = family.policyHistory || [];
+  if (history.some((entry) => entry.id === policy.id)) return family;
+  return {
+    ...family,
+    policyHistory: [...history, { id: policy.id, title: policy.title, phaseId: policy.phaseId }],
+  };
+}
+
+function applyPolicyEffect(family, phaseId) {
+  const policy = POLICY_EFFECTS[phaseId];
+  if (!policy) return family;
+  const next = applySharedImpact(family, policy.impact);
+  return addPolicyHistory(next, { ...policy, phaseId });
+}
+
+function shockScore(room, player, phaseId) {
+  return crypto.createHash("sha256").update(`${room.room_code}:${phaseId}:${player.id}`).digest().readUInt32BE(0);
+}
+
+function applyUnemploymentShock(room, phaseId) {
+  if (phaseId !== UNEMPLOYMENT_SHOCK_PHASE || !room.players.length) return;
+  const shockCount = Math.max(1, Math.round(room.players.length * 0.25));
+  const capacity = phaseCapacity(phaseId, room.players.length);
+  const communityCushion = (room.shared?.communityPot ?? 0) >= capacity.communityNeed;
+  const selected = [...room.players]
+    .sort((a, b) => shockScore(room, a, phaseId) - shockScore(room, b, phaseId))
+    .slice(0, shockCount);
+  const selectedIds = new Set(selected.map((player) => player.id));
+  const impact = communityCushion
+    ? { savings: -9, hope: -8, stability: -7, food: -2 }
+    : { savings: -18, hope: -14, stability: -13, food: -5 };
+
+  room.players = room.players.map((player) => {
+    if (!selectedIds.has(player.id)) return player;
+    const next = applySharedImpact(player, impact);
+    return {
+      ...next,
+      employmentShock: {
+        phaseId,
+        title: "Main job lost",
+        detail: communityCushion
+          ? "Your family lost its main job, but the community pot softened part of the blow."
+          : "Your family lost its main job with little community cushion available.",
+      },
+    };
+  });
+
+  room.shared = {
+    ...(room.shared || {}),
+    communityPot: communityCushion ? Math.max(0, (room.shared?.communityPot ?? 0) - shockCount) : room.shared?.communityPot ?? 0,
+    lastShock: {
+      phaseId,
+      count: shockCount,
+      title: "Unemployment shock",
+      detail: `${shockCount} of ${room.players.length} families lost their main job, reflecting unemployment near one quarter of workers at the crisis peak.`,
+      cushioned: communityCushion,
+    },
+  };
+}
+
+function applyPhaseEntryEvents(room, phaseId) {
+  room.entry_events = room.entry_events || {};
+  if (room.entry_events[phaseId]) return;
+  const policy = POLICY_EFFECTS[phaseId];
+  if (policy) {
+    room.players = room.players.map((player) => applyPolicyEffect(player, phaseId));
+    room.shared = {
+      ...(room.shared || {}),
+      activePolicy: { id: policy.id, title: policy.title, detail: policy.detail, phaseId },
+    };
+  }
+  applyUnemploymentShock(room, phaseId);
+  room.entry_events[phaseId] = true;
+}
+
 function resolveScarcity(contenders, slots) {
   return [...contenders]
     .sort((a, b) => (b.player.reputation ?? 50) - (a.player.reputation ?? 50) || a.player.slot - b.player.slot)
@@ -257,6 +361,8 @@ function sharedSnapshot(room, phaseId) {
     trust: room.shared?.trust ?? 55,
     communityPot: room.shared?.communityPot ?? 3,
     lastRound: room.shared?.lastRound || "No shared decision has resolved yet.",
+    activePolicy: room.shared?.activePolicy || null,
+    lastShock: room.shared?.lastShock || null,
     ...phaseCapacity(phaseId, playerCount),
   };
 }
@@ -621,6 +727,8 @@ async function handleGameRequest(req, res) {
       await Promise.all(room.players.map((player) => savePlayer(code, player)));
       room.phase_index = Math.min(room.phase_index + 1, PHASE_IDS.length - 1);
       room.phase_started_at = new Date().toISOString();
+      applyPhaseEntryEvents(room, PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)]);
+      await Promise.all(room.players.map((player) => savePlayer(code, player)));
     }
     room.updated_at = new Date().toISOString();
     await saveRoom(room);
@@ -631,6 +739,8 @@ async function handleGameRequest(req, res) {
     if (!body.host_token || body.host_token !== room.host_token) return json(res, 403, { detail: "Only the host can advance this room." });
     room.phase_index = Math.min(room.phase_index + 1, PHASE_IDS.length - 1);
     room.phase_started_at = new Date().toISOString();
+    applyPhaseEntryEvents(room, PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)]);
+    await Promise.all(room.players.map((player) => savePlayer(code, player)));
     room.updated_at = new Date().toISOString();
     await saveRoom(room);
     return json(res, 200, { room: publicRoom(room) });
