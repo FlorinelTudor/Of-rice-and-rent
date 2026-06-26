@@ -2,7 +2,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "https://vatican-disable-psi-rhythm.trycloudflare.com/$1"
+      "dest": "https://approx-marking-mpegs-stays.trycloudflare.com/$1"
     }
   ],
   "buildCommand": "PUBLIC_URL= npm run build",
