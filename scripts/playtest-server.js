@@ -8,6 +8,24 @@ const BETRAYAL_POT_DRAIN = 3;
 const BETRAYAL_EXPLOIT_MARKERS = 2;
 const BETRAYAL_REPUTATION_HIT = -24;
 const UNEMPLOYMENT_SHOCK_PHASE = "deepening";
+const COLLAPSE_REASONS = {
+  health: {
+    title: "Family health collapsed",
+    detail: "Health stayed at zero for more than a phase. The family can no longer keep up with the demands of the crisis.",
+  },
+  food: {
+    title: "The pantry ran empty",
+    detail: "Food stayed at zero for more than a phase. Survival choices have overtaken every other goal.",
+  },
+  hope: {
+    title: "Hope gave out",
+    detail: "Hope stayed at zero for more than a phase. The family withdraws from the race and focuses only on getting through the day.",
+  },
+  debt: {
+    title: "Debt overwhelmed the household",
+    detail: "Debt stayed at or above 100 for more than a phase. Creditors, rent, and obligations have overtaken the household plan.",
+  },
+};
 const PORT = Number(process.env.PORT || 4173);
 const PHASE_IDS = [
   "postwar",
@@ -443,6 +461,45 @@ function applySharedImpact(family, impact) {
   return next;
 }
 
+function collapseReason(family) {
+  if ((family.health ?? 100) <= 0) return "health";
+  if ((family.food ?? 100) <= 0) return "food";
+  if ((family.hope ?? 100) <= 0) return "hope";
+  if ((family.debt ?? 0) >= 100) return "debt";
+  return null;
+}
+
+function applyCollapseChecks(room, phaseId, { allowGameOver = true } = {}) {
+  room.players = (room.players || []).map((player) => {
+    if (player.gameOver) return player;
+    const reason = collapseReason(player);
+    if (!reason) {
+      const { collapseWarning, ...rest } = player;
+      return rest;
+    }
+    if (allowGameOver && player.collapseWarning && player.collapseWarning.phaseId !== phaseId) {
+      return {
+        ...player,
+        gameOver: {
+          reason,
+          phaseId,
+          title: COLLAPSE_REASONS[reason].title,
+          detail: COLLAPSE_REASONS[reason].detail,
+        },
+      };
+    }
+    return {
+      ...player,
+      collapseWarning: {
+        reason,
+        phaseId,
+        title: COLLAPSE_REASONS[reason].title,
+        detail: "Danger zone: recover this meter before the next phase check or this family will receive a closing screen.",
+      },
+    };
+  });
+}
+
 function addPolicyHistory(family, policy) {
   const history = family.policyHistory || [];
   if (history.some((entry) => entry.id === policy.id)) return family;
@@ -541,6 +598,7 @@ function applyPhaseEntryEvents(room, phaseId) {
     };
   }
   applyUnemploymentShock(room, phaseId);
+  applyCollapseChecks(room, phaseId, { allowGameOver: false });
   room.entry_events[phaseId] = true;
 }
 
@@ -570,10 +628,12 @@ function resolveSharedRound(room, phaseId) {
   if (room.resolved_phases[phaseId]) return;
 
   const capacity = phaseCapacity(phaseId, room.players.length, room.scenario_id);
-  const round = room.players.map((player) => ({
-    player,
-    choices: player.choices?.[phaseId] || [],
-  }));
+  const round = room.players
+    .filter((player) => !player.gameOver)
+    .map((player) => ({
+      player,
+      choices: player.choices?.[phaseId] || [],
+    }));
   const work = round.filter((entry) => choiceHasTag(entry.choices, "work"));
   const relief = round.filter((entry) => choiceHasTag(entry.choices, "relief"));
   const cooperate = round.filter((entry) => choiceHasTag(entry.choices, "cooperate"));
@@ -584,6 +644,7 @@ function resolveSharedRound(room, phaseId) {
   const potMetNeed = communityPot >= capacity.communityNeed;
 
   room.players = room.players.map((player) => {
+    if (player.gameOver) return player;
     const choices = player.choices?.[phaseId] || [];
     let next = player;
     if (choiceHasTag(choices, "work") && !workWinners.has(player.id)) next = applySharedImpact(next, { savings: -8, hope: -5 });
@@ -620,6 +681,7 @@ function resolveSharedRound(room, phaseId) {
     },
   };
   room.resolved_phases[phaseId] = true;
+  applyCollapseChecks(room, phaseId);
 }
 
 function getRoom(req, res) {
@@ -692,6 +754,10 @@ app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
     res.status(404).json({ detail: "Player not found in this room" });
     return;
   }
+  if (room.players[index].gameOver) {
+    res.json({ room: publicRoom(room) });
+    return;
+  }
   if ((room.players[index].choices?.[phaseId] || []).length !== 2) {
     const choices = (req.body.choices || []).slice(0, 2);
     const phaseStartedAt = Date.parse(room.phase_started_at || room.updated_at || room.created_at || new Date().toISOString());
@@ -699,7 +765,8 @@ app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
     const updated = applyChoices(room.players[index], choices, phaseId, { rushed });
     updated.choices = { ...(room.players[index].choices || {}), [phaseId]: choices };
     room.players[index] = updated;
-    if (room.players.length && room.players.every((player) => (player.choices?.[phaseId] || []).length === 2)) {
+    const activePlayers = room.players.filter((player) => !player.gameOver);
+    if (activePlayers.length && activePlayers.every((player) => (player.choices?.[phaseId] || []).length === 2)) {
       resolveSharedRound(room, phaseId);
       room.phase_index = Math.min(room.phase_index + 1, PHASE_IDS.length - 1);
       room.phase_started_at = new Date().toISOString();

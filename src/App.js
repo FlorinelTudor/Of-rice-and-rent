@@ -291,23 +291,16 @@ function getExtremeChoices(family, phaseId) {
 
 function familyImageFor(family) {
   if (!family) return "family-profile.png";
-  const minHealth = Math.min(family.health ?? 100, family.minHealth ?? 100);
-  const dangerValues = [
+  const currentDangerValues = [
     family.food,
     family.health,
     family.hope,
     family.education,
     family.stability,
     family.savings,
-    family.minFood,
-    family.minHealth,
-    family.minHope,
-    family.minEducation,
-    family.minStability,
-    family.minSavings,
   ].filter((value) => typeof value === "number");
-  if (minHealth < 25) return "family-health-crisis.png";
-  if (dangerValues.some((value) => value < 25)) return "family-danger-state.png";
+  if ((family.health ?? 100) < 25) return "family-health-crisis.png";
+  if (currentDangerValues.some((value) => value < 25)) return "family-danger-state.png";
   return FAMILY_PORTRAITS[family.name] || "family-profile.png";
 }
 
@@ -320,6 +313,7 @@ function scoreFamily(family) {
   const debtPenalty = family.debt * 0.28;
   const reputationBonus = ((family.reputation ?? 50) - 50) * 0.22;
   const exploitPenalty = (family.exploitMarkers || 0) * 5;
+  const gameOverPenalty = family.gameOver ? 25 : 0;
   const dangerMeters = ["minFood", "minHealth", "minHope", "minEducation", "minStability", "minSavings"];
   const dangerPenalty = dangerMeters.reduce((sum, key) => {
     const value = family[key] ?? 100;
@@ -329,7 +323,7 @@ function scoreFamily(family) {
     return sum;
   }, 0);
   const resilienceBonus = dangerPenalty === 0 ? 6 : 0;
-  return clamp(core - debtPenalty - dangerPenalty - exploitPenalty + reputationBonus + resilienceBonus + objectiveResult(family).bonus);
+  return clamp(core - debtPenalty - dangerPenalty - exploitPenalty - gameOverPenalty + reputationBonus + resilienceBonus + objectiveResult(family).bonus);
 }
 
 function flattenChoices(family) {
@@ -558,9 +552,11 @@ function App() {
   const isResultsPhase = phase.id === "results";
   const isRecoveryPhase = phase.id === "recovery";
   const activePlayer = players.find((p) => p.id === activePlayerId) || players[0];
+  const activeRoundPlayers = players.filter((p) => !p.gameOver);
   const submittedChoices = activePlayer?.choices?.[phase.id] || [];
-  const submittedCount = players.filter((p) => p.choices?.[phase.id]?.length === 2).length;
+  const submittedCount = activeRoundPlayers.filter((p) => p.choices?.[phase.id]?.length === 2).length;
   const activeChoices = useMemo(() => {
+    if (activePlayer?.gameOver) return [];
     if (!phase.choices.length) return phase.choices;
     const existingChoiceIds = new Set(phase.choices.map(([id]) => id));
     const extremeChoices = getExtremeChoices(activePlayer, phase.id).filter(([id]) => !existingChoiceIds.has(id));
@@ -867,7 +863,17 @@ function App() {
                   </div>
                 )}
 
-                {isRecoveryPhase ? (
+                {activePlayer?.collapseWarning && !activePlayer?.gameOver && (
+                  <div className="gd-panel collapse-warning">
+                    <p className="gd-kicker">Family In Danger</p>
+                    <h2>{activePlayer.collapseWarning.title}</h2>
+                    <p>{activePlayer.collapseWarning.detail}</p>
+                  </div>
+                )}
+
+                {activePlayer?.gameOver ? (
+                  <FamilyGameOver family={activePlayer} />
+                ) : isRecoveryPhase ? (
                   <RecoveryInterlude phase={phase} view={view} isBusy={isBusy} onAdvance={advancePhase} />
                 ) : activeChoices.length > 0 && submittedChoices.length > 0 ? (
                   <div className="gd-panel gd-submitted">
@@ -878,7 +884,7 @@ function App() {
                       player in the room has submitted, or the host can advance it manually.
                     </p>
                     {rushedChoiceWarning && <p className="gd-sync">Quick choices gave reduced positive gains this round.</p>}
-                    <p className="gd-sync">Submitted {submittedCount}/{players.length}</p>
+                    <p className="gd-sync">Submitted {submittedCount}/{activeRoundPlayers.length}</p>
                     {view === "host" && <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>Advance now</button>}
                   </div>
                 ) : (
@@ -922,8 +928,8 @@ function App() {
             {view === "host" && !isResultsPhase && (
               <div className="gd-panel">
                 <p className="gd-kicker">Host Controls</p>
-                <p className="gd-sync">Players {players.length}/{MAX_PLAYERS} - submitted {submittedCount}/{players.length}</p>
-              <p className="gd-sync">Phase {Math.min(phaseIndex + 1, phases.length)}/{phases.length} - target 20-25 min</p>
+                <p className="gd-sync">Players {players.length}/{MAX_PLAYERS} - submitted {submittedCount}/{activeRoundPlayers.length}</p>
+                <p className="gd-sync">Phase {Math.min(phaseIndex + 1, phases.length)}/{phases.length} - target 20-25 min</p>
                 <p className="gd-sync">Sync {lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString() : "waiting"}</p>
                 <button onClick={addDemoPlayer} disabled={isBusy || players.length >= MAX_PLAYERS}>Add demo player</button>
                 <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>{isRecoveryPhase ? "Show results" : "Advance phase"}</button>
@@ -961,6 +967,28 @@ function RecoveryInterlude({ phase, view, isBusy, onAdvance }) {
           hidden-objective outcomes, and historical debrief.
         </p>
         {view === "host" && <button onClick={onAdvance} disabled={isBusy}>Show final results</button>}
+      </div>
+    </div>
+  );
+}
+
+function gameOverImageFor(family) {
+  if (family?.gameOver?.reason === "health") return "family-health-crisis.png";
+  return "family-danger-state.png";
+}
+
+function FamilyGameOver({ family }) {
+  const reason = family?.gameOver;
+  return (
+    <div className="gd-panel family-game-over">
+      <img src={asset(gameOverImageFor(family))} alt="" />
+      <div>
+        <p className="gd-kicker">Family Closing Screen</p>
+        <h2>{reason?.title || "The family could not continue"}</h2>
+        <p>{reason?.detail || "This family has left the competition and will be scored with a collapse penalty."}</p>
+        <p className="gd-sync">
+          You can still watch the room continue. Your final score will include a collapse penalty, plus any objective progress already earned.
+        </p>
       </div>
     </div>
   );
@@ -1259,6 +1287,7 @@ function LeaderboardRow({ player, index }) {
       <span>
         {player.playerName || "Player"} ({player.name} Family)
         <small>Trust {player.reputation ?? 50} · Exploit markers {player.exploitMarkers || 0}</small>
+        {player.gameOver && <small>Collapsed: {player.gameOver.title}</small>}
         {player.objectiveTitle && (
           <small>{objective.completed ? "+10" : "0"} objective: {player.objectiveTitle}</small>
         )}

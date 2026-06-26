@@ -2,7 +2,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "https://wilderness-responsible-chronicles-him.trycloudflare.com/$1"
+      "dest": "https://scoring-caught-dice-seller.trycloudflare.com/$1"
     }
   ],
   "buildCommand": "PUBLIC_URL= npm run build",

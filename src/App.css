@@ -830,6 +830,44 @@
   color: #6f241d;
 }
 
+.collapse-warning {
+  border-color: #e3b7ad;
+  background: #fff7f2;
+}
+
+.collapse-warning h2 {
+  margin: 0 0 8px;
+  color: #6f241d;
+}
+
+.family-game-over {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: center;
+  border-color: #d29c92;
+  background: #fff5f2;
+}
+
+.family-game-over img {
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+  border-radius: 8px;
+  filter: saturate(.9);
+}
+
+.family-game-over h2 {
+  margin: 0 0 10px;
+  color: #6f241d;
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: 1;
+}
+
+.family-game-over p:not(.gd-kicker) {
+  color: #64433e;
+}
+
 .condition-list {
   display: grid;
   gap: 10px;
@@ -1307,6 +1345,7 @@
   }
 
   .winner-badge,
+  .family-game-over,
   .award-grid {
     grid-template-columns: 1fr;
   }
