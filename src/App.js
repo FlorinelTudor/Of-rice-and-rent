@@ -25,22 +25,22 @@ const SCENARIO_OPTIONS = [
   {
     id: "easy_credit",
     title: "Easy Credit",
-    detail: "Installment plans and loans feel unusually tempting. Early comfort is easier, but debt pressure bites harder later.",
+    detail: "Comfort comes easily. Debt bites later.",
   },
   {
     id: "harsh_winter",
     title: "Harsh Winter",
-    detail: "Food and health pressure hit harder. Mutual aid and cash cushions become more valuable.",
+    detail: "Food and health pressure hit harder.",
   },
   {
     id: "bank_panic",
     title: "Bank Panic",
-    detail: "Bank confidence is fragile. Cash, trust, and timing matter more than usual.",
+    detail: "Trust, cash, and timing matter most.",
   },
   {
     id: "relief_politics",
     title: "Relief Politics",
-    detail: "Public help is stronger, but access is uneven and reputation matters more.",
+    detail: "Public help grows, but access is uneven.",
   },
 ];
 
