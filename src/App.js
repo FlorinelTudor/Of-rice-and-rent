@@ -544,6 +544,7 @@ function App() {
   const [isBusy, setIsBusy] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState(savedGame.lastSyncedAt || 0);
   const [phaseRevealVisible, setPhaseRevealVisible] = useState(false);
+  const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState([]);
   const viewRef = useRef(savedGame.view || "start");
   const joinClientIdRef = useRef(savedGame.joinClientId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
@@ -567,6 +568,32 @@ function App() {
     [players]
   );
   const rushedChoiceWarning = activePlayer?.lastChoiceRushed;
+  const privateNotices = useMemo(() => {
+    if (!activePlayer || isResultsPhase) return [];
+    const notices = [];
+    if (activePlayer.collapseWarning && !activePlayer.gameOver) {
+      notices.push({
+        key: `${activePlayer.id}-${phase.id}-collapse-${activePlayer.collapseWarning.reason}`,
+        type: "danger",
+        kicker: "Family In Danger",
+        title: activePlayer.collapseWarning.title,
+        detail: activePlayer.collapseWarning.detail,
+        image: activePlayer.collapseWarning.reason === "health" ? "family-health-crisis.png" : "family-danger-state.png",
+      });
+    }
+    if (activePlayer.employmentShock?.phaseId === phase.id) {
+      notices.push({
+        key: `${activePlayer.id}-${phase.id}-job-loss`,
+        type: "job",
+        kicker: "Private Family Notice",
+        title: activePlayer.employmentShock.title,
+        detail: activePlayer.employmentShock.detail,
+        image: "work-relief-market.png",
+      });
+    }
+    return notices;
+  }, [activePlayer, isResultsPhase, phase.id]);
+  const activePrivateNotice = privateNotices.find((notice) => !dismissedNoticeKeys.includes(notice.key));
 
   useEffect(() => {
     viewRef.current = view;
@@ -776,6 +803,11 @@ function App() {
     setSelected([]);
   }
 
+  function dismissPrivateNotice() {
+    if (!activePrivateNotice) return;
+    setDismissedNoticeKeys((current) => [...current, activePrivateNotice.key]);
+  }
+
   return (
     <main className="gd-app">
       <section className="gd-topbar">
@@ -786,6 +818,9 @@ function App() {
         <div className="gd-room">Room {roomCode || "not started"}</div>
       </section>
       {apiError && <div className="gd-alert">{apiError}</div>}
+      {activePrivateNotice && (
+        <PrivateNoticeModal notice={activePrivateNotice} onDismiss={dismissPrivateNotice} />
+      )}
 
       {view === "start" && (
         <section className="gd-start">
@@ -855,22 +890,6 @@ function App() {
                   {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
                 </div>
 
-                {activePlayer?.employmentShock?.phaseId === phase.id && (
-                  <div className="gd-panel employment-alert">
-                    <p className="gd-kicker">Private Family Notice</p>
-                    <h2>{activePlayer.employmentShock.title}</h2>
-                    <p>{activePlayer.employmentShock.detail}</p>
-                  </div>
-                )}
-
-                {activePlayer?.collapseWarning && !activePlayer?.gameOver && (
-                  <div className="gd-panel collapse-warning">
-                    <p className="gd-kicker">Family In Danger</p>
-                    <h2>{activePlayer.collapseWarning.title}</h2>
-                    <p>{activePlayer.collapseWarning.detail}</p>
-                  </div>
-                )}
-
                 {activePlayer?.gameOver ? (
                   <FamilyGameOver family={activePlayer} />
                 ) : isRecoveryPhase ? (
@@ -924,7 +943,6 @@ function App() {
             <ScenarioPanel scenario={scenario} shared={shared} />
             <CommunityPanel shared={shared} />
             <PolicyPanel shared={shared} />
-            <Conditions conditions={phase.conditions} />
             {view === "host" && !isResultsPhase && (
               <div className="gd-panel">
                 <p className="gd-kicker">Host Controls</p>
@@ -941,6 +959,28 @@ function App() {
         </>
       )}
     </main>
+  );
+}
+
+function PrivateNoticeModal({ notice, onDismiss }) {
+  return (
+    <div className="private-notice-backdrop" role="presentation">
+      <section className={`private-notice private-notice-${notice.type}`} role="dialog" aria-modal="true" aria-labelledby="private-notice-title">
+        <img src={asset(notice.image)} alt="" />
+        <div>
+          <p className="gd-kicker">{notice.kicker}</p>
+          <h2 id="private-notice-title">{notice.title}</h2>
+          <p>{notice.detail}</p>
+          {notice.type === "danger" && (
+            <p className="notice-hint">Recover this meter before the next phase resolves, or this family receives a closing screen.</p>
+          )}
+          {notice.type === "job" && (
+            <p className="notice-hint">New emergency choices may appear for this family this phase.</p>
+          )}
+          <button onClick={onDismiss}>Continue</button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -1207,22 +1247,6 @@ function PolicyPanel({ shared }) {
           <p>{shock.detail}</p>
         </div>
       )}
-    </div>
-  );
-}
-
-function Conditions({ conditions }) {
-  return (
-    <div className="gd-panel">
-      <p className="gd-kicker">Shared Conditions</p>
-      <div className="condition-list">
-        {conditions.map(([label, value, status]) => (
-          <div className="condition" key={label}>
-            <span className={status}>{status === "good" ? "↗" : status === "bad" ? "!" : "•"}</span>
-            <div><strong>{label}</strong><p>{value}</p></div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

@@ -820,24 +820,84 @@
   color: var(--gd-bad);
 }
 
-.employment-alert {
-  border-color: #e3b7ad;
+.private-notice-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(38, 28, 22, .44);
+  backdrop-filter: blur(5px);
+}
+
+.private-notice {
+  width: min(780px, 100%);
+  display: grid;
+  grid-template-columns: minmax(220px, 310px) minmax(0, 1fr);
+  gap: 22px;
+  align-items: center;
+  padding: 18px;
+  border: 1px solid #d9b3a7;
+  border-radius: 10px;
+  background: #fffaf5;
+  box-shadow: 0 28px 70px rgba(38, 28, 22, .28);
+  animation: notice-pop .22s ease-out;
+}
+
+.private-notice-danger {
+  border-color: #cf9287;
   background: #fff5f2;
 }
 
-.employment-alert h2 {
-  margin: 0 0 8px;
-  color: #6f241d;
+.private-notice-job {
+  border-color: #d6c092;
+  background: #fff9ed;
 }
 
-.collapse-warning {
-  border-color: #e3b7ad;
-  background: #fff7f2;
+.private-notice img {
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+  border-radius: 8px;
 }
 
-.collapse-warning h2 {
-  margin: 0 0 8px;
-  color: #6f241d;
+.private-notice h2 {
+  margin: 0 0 10px;
+  color: #5f211c;
+  font-size: clamp(30px, 5vw, 58px);
+  line-height: .98;
+}
+
+.private-notice p:not(.gd-kicker) {
+  color: #5f4740;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.private-notice .notice-hint {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(111, 36, 29, .16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .58);
+  font-weight: 700;
+}
+
+.private-notice button {
+  margin-top: 12px;
+  min-width: 150px;
+}
+
+@keyframes notice-pop {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .family-game-over {
@@ -1344,10 +1404,15 @@
     width: 100%;
   }
 
+  .private-notice,
   .winner-badge,
   .family-game-over,
   .award-grid {
     grid-template-columns: 1fr;
+  }
+
+  .private-notice img {
+    height: 190px;
   }
 
   .winner-badge img {
