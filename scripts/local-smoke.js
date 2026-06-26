@@ -64,11 +64,11 @@ async function createFullRoom(baseUrl, prefix) {
     )
   );
 
-  return roomCode;
+  return { roomCode, hostToken: created.hostToken };
 }
 
 async function assertHardBetrayal(baseUrl) {
-  const roomCode = await createFullRoom(baseUrl, "Betrayal Probe");
+  const { roomCode } = await createFullRoom(baseUrl, "Betrayal Probe");
   let state = await request(baseUrl, `/rooms/${roomCode}`);
   const betrayer = state.room.players[0];
 
@@ -97,7 +97,7 @@ async function assertHardBetrayal(baseUrl) {
 async function main() {
   const baseUrl = getBaseUrl();
   await assertHardBetrayal(baseUrl);
-  const roomCode = await createFullRoom(baseUrl, "Local Player");
+  const { roomCode, hostToken } = await createFullRoom(baseUrl, "Local Player");
 
   let state = await request(baseUrl, `/rooms/${roomCode}`);
   const families = state.room.players.map((player) => player.name);
@@ -158,6 +158,16 @@ async function main() {
         throw new Error("Expected every family to record the 1933 banking policy effect");
       }
     }
+  }
+  if (state.room.phaseIndex !== 10) {
+    throw new Error(`Expected recovery phase before results, got ${state.room.phaseIndex}`);
+  }
+  state = await request(baseUrl, `/rooms/${roomCode}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ host_token: hostToken }),
+  });
+  if (state.room.phaseIndex !== 11) {
+    throw new Error(`Expected results phase after host advance, got ${state.room.phaseIndex}`);
   }
   if (!state.room.rematchScenario?.id || state.room.rematchScenario.id === state.room.scenario.id) {
     throw new Error("Expected final room state to recommend a different rematch scenario");

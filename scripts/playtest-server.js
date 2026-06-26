@@ -21,6 +21,7 @@ const PHASE_IDS = [
   "second",
   "defense_shift",
   "recovery",
+  "results",
 ];
 
 const SCENARIOS = [
@@ -94,6 +95,10 @@ const EVENT_VARIANTS = {
   recovery: [
     { id: "hiring_surge", title: "Hiring surges unevenly", detail: "The long crisis eases, but family outcomes remain unequal." },
     { id: "new_beginnings", title: "Families count what survived", detail: "Savings, health, schooling, and trust tell different stories." },
+  ],
+  results: [
+    { id: "family_ledgers", title: "Families compare ledgers", detail: "Final scores reveal how risk, trust, debt, and hardship shaped different outcomes." },
+    { id: "table_debrief", title: "The room reviews its choices", detail: "The same timeline produced different incentives, sacrifices, and survival stories." },
   ],
 };
 
@@ -223,6 +228,7 @@ const PHASE_PRESSURE = {
   second: { work: 0.5, relief: 0.45, need: 0.75 },
   defense_shift: { work: 0.75, relief: 0.35, need: 0.5 },
   recovery: { work: 0.9, relief: 0.3, need: 0.35 },
+  results: { work: 0.9, relief: 0.3, need: 0.35 },
 };
 
 const POLICY_EFFECTS = {

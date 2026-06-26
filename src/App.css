@@ -234,6 +234,10 @@
   align-items: start;
 }
 
+.gd-grid.results-grid {
+  grid-template-columns: 1fr;
+}
+
 .gd-main,
 .gd-sidebar {
   display: grid;
@@ -346,6 +350,130 @@
 
 .final-news h2 {
   margin: 0;
+}
+
+.recovery-transition {
+  display: grid;
+  gap: 10px;
+  border-color: #d9c28c;
+  background: #fffaf0;
+}
+
+.recovery-transition h2 {
+  margin: 0;
+  color: var(--gd-ink);
+  font-size: 28px;
+  line-height: 1.08;
+}
+
+.recovery-transition p:not(.gd-kicker) {
+  margin: 0;
+  color: var(--gd-muted);
+}
+
+.recovery-transition button {
+  width: fit-content;
+  margin-top: 4px;
+}
+
+.results-phase {
+  display: grid;
+  gap: 18px;
+}
+
+.results-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 360px);
+  gap: 18px;
+  align-items: stretch;
+  padding: 22px;
+  border: 1px solid #d6bd7a;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 248, 231, .95), rgba(248, 243, 233, .95)),
+    radial-gradient(circle at top right, rgba(214, 189, 122, .34), transparent 40%);
+}
+
+.results-hero h2 {
+  max-width: 900px;
+  margin: 0 0 12px;
+  color: var(--gd-ink);
+  font-size: clamp(56px, 8vw, 104px);
+  line-height: .86;
+}
+
+.results-hero p:not(.gd-kicker) {
+  max-width: 620px;
+  margin: 0;
+  color: var(--gd-muted);
+  font-size: 17px;
+}
+
+.results-winner {
+  display: grid;
+  gap: 6px;
+  align-content: center;
+  justify-items: center;
+  padding: 16px;
+  border: 1px solid #d6bd7a;
+  border-radius: 8px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.results-winner img {
+  width: 116px;
+  height: 116px;
+  object-fit: cover;
+  border-radius: 999px;
+  box-shadow: 0 12px 24px rgba(67, 50, 19, .14);
+}
+
+.results-winner span {
+  color: #84652f;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.results-winner strong {
+  color: var(--gd-ink);
+  font-size: 19px;
+  line-height: 1.12;
+}
+
+.results-winner small {
+  color: var(--gd-muted);
+  line-height: 1.35;
+}
+
+.results-board,
+.results-debrief-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, .95fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.results-leaderboard,
+.results-awards {
+  display: grid;
+  gap: 10px;
+}
+
+.results-award-grid {
+  grid-template-columns: 1fr;
+  margin-top: 0;
+}
+
+.results-debrief,
+.results-rematch {
+  margin-top: 0;
+}
+
+.results-debrief {
+  background: #ffffff;
 }
 
 .gd-choices {
@@ -1103,6 +1231,12 @@
   .final-news {
     grid-template-columns: 1fr;
   }
+
+  .results-hero,
+  .results-board,
+  .results-debrief-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 680px) {
@@ -1166,6 +1300,10 @@
     left: 16px;
     right: 16px;
     bottom: 16px;
+  }
+
+  .recovery-transition button {
+    width: 100%;
   }
 
   .winner-badge,

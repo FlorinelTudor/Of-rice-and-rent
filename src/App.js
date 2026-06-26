@@ -222,6 +222,17 @@ const phases = [
     conditions: [["Unemployment", "Falling", "good"], ["Bank confidence", "Recovering", "good"], ["Savings", "Rebuilding", "good"], ["Public support", "Shifting", "neutral"]],
     choices: [],
   },
+  {
+    id: "results",
+    years: "After 1942",
+    title: "Family Ledgers and Historical Debrief",
+    image: "award-most-resilient-family.png",
+    newsImage: null,
+    news: "Families compare outcomes and choices",
+    summary: "The game ends by comparing survival scores, awards, hidden objectives, and the historical patterns your room created together.",
+    conditions: [["Final scores", "Ready", "good"], ["Awards", "Ready", "good"], ["Debrief", "Discuss aloud", "neutral"], ["Rematch", "Optional", "warn"]],
+    choices: [],
+  },
 ];
 
 const extremeChoiceRules = [
@@ -544,6 +555,8 @@ function App() {
 
   const phase = phases[phaseIndex] || phases[0];
   const isFinalPhase = phaseIndex >= phases.length - 1;
+  const isResultsPhase = phase.id === "results";
+  const isRecoveryPhase = phase.id === "recovery";
   const activePlayer = players.find((p) => p.id === activePlayerId) || players[0];
   const submittedChoices = activePlayer?.choices?.[phase.id] || [];
   const submittedCount = players.filter((p) => p.choices?.[phase.id]?.length === 2).length;
@@ -599,11 +612,16 @@ function App() {
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
+    window.scrollTo(0, 0);
+    if (phase.id === "results") {
+      setPhaseRevealVisible(false);
+      return undefined;
+    }
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     setPhaseRevealVisible(true);
     const timer = window.setTimeout(() => setPhaseRevealVisible(false), reduceMotion ? 350 : 4400);
     return () => window.clearTimeout(timer);
-  }, [phaseIndex, view]);
+  }, [phase.id, phaseIndex, view]);
 
   function syncRoom(room) {
     if (!room) return;
@@ -811,7 +829,7 @@ function App() {
 
       {(view === "host" || view === "player") && (
         <>
-        {phaseRevealVisible && (
+        {phaseRevealVisible && !isResultsPhase && (
           <div className="phase-reveal" key={phase.id} aria-hidden="true">
             <img src={asset(phase.image)} alt="" />
             <div className="phase-reveal-copy">
@@ -820,10 +838,14 @@ function App() {
             </div>
           </div>
         )}
-        <section className={`gd-grid ${phaseRevealVisible ? "phase-ui-hidden" : "phase-ui-visible"}`}>
+        <section className={[
+          "gd-grid",
+          isResultsPhase ? "results-grid" : "",
+          phaseRevealVisible && !isResultsPhase ? "phase-ui-hidden" : "phase-ui-visible",
+        ].filter(Boolean).join(" ")}>
           <div className="gd-main">
-            {isFinalPhase ? (
-              <FinalPhase phase={phase} players={scoredPlayers} shared={shared} scenario={scenario} rematchScenario={rematchScenario} />
+            {isResultsPhase ? (
+              <ResultsPhase players={scoredPlayers} shared={shared} scenario={scenario} rematchScenario={rematchScenario} />
             ) : (
               <>
                 <div className="gd-market">
@@ -846,7 +868,9 @@ function App() {
                   </div>
                 )}
 
-                {activeChoices.length > 0 && submittedChoices.length > 0 ? (
+                {isRecoveryPhase ? (
+                  <RecoveryInterlude phase={phase} view={view} isBusy={isBusy} onAdvance={advancePhase} />
+                ) : activeChoices.length > 0 && submittedChoices.length > 0 ? (
                   <div className="gd-panel gd-submitted">
                     <p className="gd-kicker">Choices Submitted</p>
                     <h2>Ready for the next phase</h2>
@@ -889,25 +913,25 @@ function App() {
             )}
           </div>
 
-          <aside className="gd-sidebar">
+          {!isResultsPhase && <aside className="gd-sidebar">
             <FamilyCard family={activePlayer} />
             {activePlayer && <Meters family={activePlayer} />}
             <ScenarioPanel scenario={scenario} shared={shared} />
             <CommunityPanel shared={shared} />
             <PolicyPanel shared={shared} />
             <Conditions conditions={phase.conditions} />
-            {view === "host" && (
+            {view === "host" && !isResultsPhase && (
               <div className="gd-panel">
                 <p className="gd-kicker">Host Controls</p>
                 <p className="gd-sync">Players {players.length}/{MAX_PLAYERS} - submitted {submittedCount}/{players.length}</p>
               <p className="gd-sync">Phase {Math.min(phaseIndex + 1, phases.length)}/{phases.length} - target 20-25 min</p>
                 <p className="gd-sync">Sync {lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString() : "waiting"}</p>
                 <button onClick={addDemoPlayer} disabled={isBusy || players.length >= MAX_PLAYERS}>Add demo player</button>
-                <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>Advance phase</button>
+                <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>{isRecoveryPhase ? "Show results" : "Advance phase"}</button>
                 <button onClick={() => setView("host")}>Show leaderboard</button>
               </div>
             )}
-          </aside>
+          </aside>}
         </section>
         </>
       )}
@@ -915,7 +939,7 @@ function App() {
   );
 }
 
-function FinalPhase({ phase, players, shared, scenario, rematchScenario }) {
+function RecoveryInterlude({ phase, view, isBusy, onAdvance }) {
   return (
     <div className="final-phase">
       <div className="final-phase-hero">
@@ -931,7 +955,84 @@ function FinalPhase({ phase, players, shared, scenario, rematchScenario }) {
         {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
         <h2>{phase.news}</h2>
       </div>
-      <Leaderboard players={players} shared={shared} scenario={scenario} rematchScenario={rematchScenario} />
+      <div className="gd-panel recovery-transition">
+        <p className="gd-kicker">Recovery Phase Complete</p>
+        <h2>The room is ready to compare outcomes</h2>
+        <p>
+          This phase closes the historical timeline. Advance once more to reveal the final leaderboard, awards,
+          hidden-objective outcomes, and historical debrief.
+        </p>
+        {view === "host" && <button onClick={onAdvance} disabled={isBusy}>Show final results</button>}
+      </div>
+    </div>
+  );
+}
+
+function ResultsPhase({ players, shared, scenario, rematchScenario }) {
+  const awards = computeAwards(players, scenario);
+  const debrief = historicalDebrief(players, shared);
+  return (
+    <div className="results-phase">
+      <section className="results-hero">
+        <div>
+          <p className="gd-kicker">After Action Review</p>
+          <h2>Final Results</h2>
+          <p>Leaderboard, awards, hidden objectives, and historical discussion prompts for the room.</p>
+        </div>
+        {awards[0] && (
+          <div className="results-winner">
+            <img src={asset("award-most-resilient-family.png")} alt="Most Resilient Family badge" />
+            <span>Winner</span>
+            <strong>{awards[0].player.playerName || "Player"} ({awards[0].player.name} Family)</strong>
+            <small>{awards[0].detail}</small>
+          </div>
+        )}
+      </section>
+
+      <section className="results-board">
+        <div className="gd-panel results-leaderboard">
+          <p className="gd-kicker">Leaderboard</p>
+          <h2>Scores include danger penalties</h2>
+          {players.map((player, index) => (
+            <LeaderboardRow player={player} index={index} key={player.id} />
+          ))}
+          <p className="gd-note">Scores include danger penalties, debt, trust reputation, exploit markers, and a +10 family objective bonus.</p>
+        </div>
+
+        <div className="gd-panel results-awards">
+          <p className="gd-kicker">Awards</p>
+          <div className="award-grid results-award-grid">
+            {awards.map((award) => (
+              <div className={award.primary ? "award-card primary" : "award-card"} key={award.id}>
+                <span>{award.primary ? "★" : "•"}</span>
+                <div>
+                  <strong>{award.title}</strong>
+                  <p>{award.player.playerName || "Player"} ({award.player.name} Family)</p>
+                  <small>{award.detail}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="results-debrief-grid">
+        <div className="debrief-panel results-debrief">
+          <p className="gd-kicker">Historical Debrief</p>
+          <h3>What this room experienced</h3>
+          {debrief.map((takeaway) => (
+            <p key={takeaway}>{takeaway}</p>
+          ))}
+        </div>
+        {rematchScenario && (
+          <div className="rematch-panel results-rematch">
+            <p className="gd-kicker">Next Table Challenge</p>
+            <h3>{rematchScenario.title}</h3>
+            <p>{rematchScenario.detail}</p>
+            <small>{rematchScenario.rematchPrompt}</small>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
