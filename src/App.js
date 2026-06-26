@@ -640,6 +640,16 @@ function App() {
         image: "work-relief-market.png",
       });
     }
+    if (activePlayer.hiringResult && activePlayer.hiringResult.phaseId !== phase.id) {
+      notices.push({
+        key: `${activePlayer.id}-${activePlayer.hiringResult.phaseId}-hiring`,
+        type: "hiring",
+        kicker: "Hiring Board Result",
+        title: activePlayer.hiringResult.title,
+        detail: activePlayer.hiringResult.detail,
+        image: "work-relief-market.png",
+      });
+    }
     return notices;
   }, [activePlayer, isResultsPhase, phase.id]);
   const activePrivateNotice = privateNotices.find((notice) => !dismissedNoticeKeys.includes(notice.key));
@@ -686,10 +696,6 @@ function App() {
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
     window.scrollTo(0, 0);
-    if (phase.id === "results") {
-      setPhaseRevealVisible(false);
-      return undefined;
-    }
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     setPhaseRevealVisible(true);
     const timer = window.setTimeout(() => setPhaseRevealVisible(false), reduceMotion ? 350 : 4400);
@@ -922,19 +928,19 @@ function App() {
 
       {(view === "host" || view === "player") && (
         <>
-        {phaseRevealVisible && !isResultsPhase && (
-          <div className="phase-reveal" key={phase.id} aria-hidden="true">
+        {phaseRevealVisible && (
+          <div className={isResultsPhase ? "phase-reveal results-reveal" : "phase-reveal"} key={phase.id} aria-hidden="true">
             <img src={asset(phase.image)} alt="" />
             <div className="phase-reveal-copy">
-              <p className="gd-kicker">Market Conditions - {phase.years}</p>
-              <h2>{phase.title}</h2>
+              <p className="gd-kicker">{isResultsPhase ? "Final Ledgers" : `Market Conditions - ${phase.years}`}</p>
+              <h2>{isResultsPhase ? "Who kept the dream alive?" : phase.title}</h2>
             </div>
           </div>
         )}
         <section className={[
           "gd-grid",
           isResultsPhase ? "results-grid" : "",
-          phaseRevealVisible && !isResultsPhase ? "phase-ui-hidden" : "phase-ui-visible",
+          phaseRevealVisible ? "phase-ui-hidden" : "phase-ui-visible",
         ].filter(Boolean).join(" ")}>
           <div className="gd-main">
             {isResultsPhase ? (
@@ -1017,7 +1023,7 @@ function App() {
             <FamilyCard family={activePlayer} />
             {activePlayer && <Meters family={activePlayer} />}
             <ScenarioPanel scenario={scenario} shared={shared} />
-            <CommunityPanel shared={shared} />
+            <CommunityPanel shared={shared} playerCount={activeRoundPlayers.length || players.length} />
             <PolicyPanel shared={shared} />
             {view === "host" && !isResultsPhase && (
               <div className="gd-panel">
@@ -1052,6 +1058,9 @@ function PrivateNoticeModal({ notice, onDismiss }) {
           )}
           {notice.type === "job" && (
             <p className="notice-hint">New emergency choices may appear for this family this phase.</p>
+          )}
+          {notice.type === "hiring" && (
+            <p className="notice-hint">Scarce work resolves only after all players submit, so rushing does not improve the odds.</p>
           )}
           <button onClick={onDismiss}>Continue</button>
         </div>
@@ -1256,7 +1265,7 @@ function Meters({ family }) {
   );
 }
 
-function CommunityPanel({ shared }) {
+function CommunityPanel({ shared, playerCount = 0 }) {
   const current = shared || {
     trust: 55,
     communityPot: 3,
@@ -1267,11 +1276,26 @@ function CommunityPanel({ shared }) {
   };
   const trustStatus = current.trust >= 68 ? "good" : current.trust <= 35 ? "bad" : "warn";
   const potStatus = current.communityPot >= current.communityNeed ? "good" : current.communityPot <= 1 ? "bad" : "warn";
+  const familiesCompeting = Math.max(1, playerCount);
+  const workScarce = current.workSlots < familiesCompeting;
+  const reliefScarce = current.reliefSlots < familiesCompeting;
   return (
     <div className="gd-panel community-panel">
       <p className="gd-kicker">Town Hall</p>
       <h2>Discuss aloud, choose secretly</h2>
       <p className="gd-sync">Take a short meeting discussion before choices. The app only records final choices.</p>
+      <div className="scarcity-board">
+        <div className={workScarce ? "scarcity-card scarce" : "scarcity-card"}>
+          <span>Work slots</span>
+          <strong>{current.workSlots}/{familiesCompeting}</strong>
+          <p>{workScarce ? "Scarce. Hiring resolves after all choices." : "Enough for current applicants."}</p>
+        </div>
+        <div className={reliefScarce ? "scarcity-card scarce" : "scarcity-card"}>
+          <span>Relief slots</span>
+          <strong>{current.reliefSlots}/{familiesCompeting}</strong>
+          <p>{reliefScarce ? "Scarce. Not first-click-wins." : "Enough for current applicants."}</p>
+        </div>
+      </div>
       <div className="community-stats">
         <div>
           <span>Work slots</span>

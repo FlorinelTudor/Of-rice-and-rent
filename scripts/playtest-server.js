@@ -691,7 +691,21 @@ function resolveSharedRound(room, phaseId) {
     if (player.gameOver) return player;
     const choices = player.choices?.[phaseId] || [];
     let next = player;
-    if (choiceHasTag(choices, "work") && !workWinners.has(player.id)) next = applySharedImpact(next, { savings: -8, hope: -5 });
+    if (choiceHasTag(choices, "work")) {
+      const hired = workWinners.has(player.id);
+      next = {
+        ...next,
+        hiringResult: {
+          phaseId,
+          hired,
+          title: hired ? "Work slot secured" : "No work slot this round",
+          detail: hired
+            ? `Your family was selected from ${work.length} applicants for ${capacity.workSlots} work slots. Reputation and family conditions helped; clicking faster did not.`
+            : `Your family joined ${work.length} applicants for ${capacity.workSlots} work slots and was not selected. The hiring board resolved after all choices were in, not by submission speed.`,
+        },
+      };
+      if (!hired) next = applySharedImpact(next, { savings: -8, hope: -5 });
+    }
     if (choiceHasTag(choices, "relief") && !reliefWinners.has(player.id)) next = applySharedImpact(next, { food: -7, hope: -4 });
     if (choiceHasTag(choices, "cooperate")) next = applySharedImpact(next, { reputation: 5 });
     if (choiceHasTag(choices, "betray")) {

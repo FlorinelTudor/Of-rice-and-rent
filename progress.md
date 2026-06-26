@@ -8,3 +8,4 @@ Original prompt: Build a 10-25 minute multiplayer learning game where colleagues
 - Moved job-loss and family-collapse warnings into dismissible private pop-ups, and removed the Shared Conditions sidebar panel.
 - Added host scenario selection for new/rematch rooms, delayed private pop-ups until after the phase reveal, removed doubled recovery panels, and added anti-gaming memory for rushed/repeated/exploit-heavy play.
 - Refined host scenario buttons into compact cards with shorter scenario summaries.
+- Made scarcity more visible in Town Hall and added private post-phase hiring result pop-ups for scarce work applicants.

@@ -85,6 +85,10 @@ async function assertHardBetrayal(baseUrl) {
   );
 
   state = await request(baseUrl, `/rooms/${roomCode}`);
+  const hiringResults = state.room.players.filter((player) => player.hiringResult?.phaseId === "postwar").length;
+  if (hiringResults !== MAX_PLAYERS) {
+    throw new Error(`Expected every work applicant to receive a hiring result, got ${hiringResults}/${MAX_PLAYERS}`);
+  }
   const updatedBetrayer = state.room.players.find((player) => player.id === betrayer.id);
   if ((updatedBetrayer.exploitMarkers || 0) < 2) {
     throw new Error(`Expected hard betrayal to apply at least 2 exploit markers, got ${updatedBetrayer.exploitMarkers || 0}`);

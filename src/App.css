@@ -776,6 +776,52 @@
   margin-top: 14px;
 }
 
+.scarcity-board {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.scarcity-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #cfd8dc;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f8fbfc 0%, #edf3f5 100%);
+}
+
+.scarcity-card.scarce {
+  border-color: #d29c4f;
+  background: linear-gradient(180deg, #fff4dc 0%, #ffe5b8 100%);
+  box-shadow: 0 12px 28px rgba(153, 98, 24, .16);
+}
+
+.scarcity-card span {
+  display: block;
+  color: #6c6257;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.scarcity-card strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--gd-ink);
+  font-size: clamp(30px, 5vw, 44px);
+  line-height: .92;
+}
+
+.scarcity-card p {
+  margin: 8px 0 0;
+  color: #5d5147;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
 .community-stats > div {
   min-width: 0;
   padding: 11px;
@@ -941,6 +987,11 @@
 .private-notice-job {
   border-color: #d6c092;
   background: #fff9ed;
+}
+
+.private-notice-hiring {
+  border-color: #b9c8d8;
+  background: #f5f9fd;
 }
 
 .private-notice img {
@@ -1293,6 +1344,10 @@
   background: linear-gradient(180deg, rgba(17, 16, 14, .08), rgba(17, 16, 14, .52));
 }
 
+.results-reveal::after {
+  background: linear-gradient(180deg, rgba(17, 16, 14, .18), rgba(42, 31, 20, .7));
+}
+
 .phase-reveal-copy {
   position: relative;
   z-index: 1;
@@ -1475,6 +1530,10 @@
   }
 
   .scenario-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scarcity-board {
     grid-template-columns: 1fr;
   }
 
