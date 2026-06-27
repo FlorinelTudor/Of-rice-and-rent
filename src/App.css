@@ -1236,6 +1236,12 @@
   color: #79552c;
 }
 
+.leader-row .score-breakdown {
+  color: #31576a;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .leader-row span {
   color: var(--gd-ink);
 }

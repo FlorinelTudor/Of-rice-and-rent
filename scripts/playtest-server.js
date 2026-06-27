@@ -7,8 +7,9 @@ const MIN_THINKING_TIME_MS = 7000;
 const BETRAYAL_POT_DRAIN = 3;
 const BETRAYAL_EXPLOIT_MARKERS = 2;
 const BETRAYAL_REPUTATION_HIT = -24;
-const REPEAT_CHOICE_LIMIT = 2;
-const PATTERN_CHOICE_LIMIT = 4;
+const REPEAT_CHOICE_LIMIT = 3;
+const PATTERN_CHOICE_LIMIT = 5;
+const MAX_PATTERN_PENALTY = 8;
 const UNEMPLOYMENT_SHOCK_PHASE = "deepening";
 const COLLAPSE_REASONS = {
   health: {
@@ -296,8 +297,8 @@ function antiGamingMultiplier(family, choices) {
   const patternCounts = family.choicePatternCounts || {};
   const hasRepeatedChoice = choices.some((choice) => (repeatCounts[choice] || 0) >= REPEAT_CHOICE_LIMIT);
   const hasRepeatedPattern = choices.some((choice) => (patternCounts[choicePattern(choice)] || 0) >= PATTERN_CHOICE_LIMIT);
-  if (hasRepeatedChoice && hasRepeatedPattern) return 0.65;
-  if (hasRepeatedChoice || hasRepeatedPattern) return 0.8;
+  if (hasRepeatedChoice && hasRepeatedPattern) return 0.8;
+  if (hasRepeatedChoice || hasRepeatedPattern) return 0.9;
   return 1;
 }
 
@@ -493,12 +494,12 @@ function applyChoices(family, choices, phaseId, options = {}) {
     next.choiceRepeatCounts[choice] = (next.choiceRepeatCounts[choice] || 0) + 1;
     next.choicePatternCounts[pattern] = (next.choicePatternCounts[pattern] || 0) + 1;
     if (next.choiceRepeatCounts[choice] > REPEAT_CHOICE_LIMIT) {
-      next.patternPenalty = (next.patternPenalty || 0) + 2;
-      next.hope = clamp((next.hope || 0) - 2);
+      next.patternPenalty = Math.min(MAX_PATTERN_PENALTY, (next.patternPenalty || 0) + 1);
+      next.hope = clamp((next.hope || 0) - 1);
     }
     if (next.choicePatternCounts[pattern] > PATTERN_CHOICE_LIMIT) {
-      next.patternPenalty = (next.patternPenalty || 0) + 3;
-      next.stability = clamp((next.stability || 0) - 2);
+      next.patternPenalty = Math.min(MAX_PATTERN_PENALTY, (next.patternPenalty || 0) + 1);
+      next.stability = clamp((next.stability || 0) - 1);
     }
     if (pattern === "betrayal" && next.choicePatternCounts[pattern] > 1) {
       next.exploitMarkers = (next.exploitMarkers || 0) + 1;
@@ -553,6 +554,10 @@ function phaseCapacity(phaseId, playerCount, scenarioId = "easy_credit") {
 
 function choiceHasTag(choices, tag) {
   return choices.some((choice) => (ACTION_DYNAMICS[choice] || []).includes(tag));
+}
+
+function hasMultipleWorkChoices(choices) {
+  return choices.filter((choice) => (ACTION_DYNAMICS[choice] || []).includes("work")).length > 1;
 }
 
 function applySharedImpact(family, impact) {
@@ -676,6 +681,7 @@ function applyUnemploymentShock(room, phaseId) {
     const next = applySharedImpact(player, impact);
     return {
       ...next,
+      hiringResult: null,
       employmentShock: {
         phaseId,
         title: "Main job lost",
@@ -919,6 +925,10 @@ app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
   }
   if ((room.players[index].choices?.[phaseId] || []).length !== 2) {
     const choices = (req.body.choices || []).slice(0, 2);
+    if (hasMultipleWorkChoices(choices)) {
+      res.status(400).json({ detail: "Choose only one work action this round." });
+      return;
+    }
     const phaseStartedAt = Date.parse(room.phase_started_at || room.updated_at || room.created_at || new Date().toISOString());
     const rushed = Date.now() - phaseStartedAt < MIN_THINKING_TIME_MS;
     const updated = applyChoices(room.players[index], choices, phaseId, { rushed });

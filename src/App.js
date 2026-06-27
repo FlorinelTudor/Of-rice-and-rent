@@ -13,6 +13,7 @@ const EMERGENCY_CHOICE_LABELS = {
   emergency_debt: ["Emergency debt settlement", "Danger: settle debt now or the family may receive a closing screen next phase."],
 };
 const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market"]);
+const WORK_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "final_education_training", "final_health_shift", "undercut_wages"]);
 const WORK_OR_RELIEF_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "accept_relief", "seek_charity_clinic", "hoard_relief"]);
 const MOBILITY_CHOICES = new Set(["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"]);
 const SKILL_CHOICES = new Set(["night_school", "fund_training"]);
@@ -213,7 +214,7 @@ const phases = [
   {
     id: "second",
     years: "1937-1938",
-    title: "A Recovery Stumbles",
+    title: "Recovery Stumbles",
     image: "recovery-stumbles-market.png",
     newsImage: "public-news-1937-newspaper.png",
     news: "Recovery slows as jobless rise again",
@@ -270,7 +271,7 @@ const phases = [
     id: "results",
     years: "After 1942",
     title: "Family Ledgers and Historical Debrief",
-    image: "award-most-resilient-family.png",
+    image: "final-results-ledgers.png",
     newsImage: null,
     news: "Families compare outcomes and choices",
     summary: "The game ends by comparing survival scores, awards, hidden objectives, and the historical patterns your room created together.",
@@ -419,14 +420,7 @@ function scoreFamily(family) {
   const rushedPenalty = (family.rushedChoiceCount || 0) * 2;
   const patternPenalty = family.patternPenalty || 0;
   const communityMemoryPenalty = (family.communityMemoryHits || 0) * 3;
-  const dangerMeters = ["minFood", "minHealth", "minHope", "minEducation", "minStability", "minSavings"];
-  const dangerPenalty = dangerMeters.reduce((sum, key) => {
-    const value = family[key] ?? 100;
-    if (value < 10) return sum + 18;
-    if (value < 25) return sum + 10;
-    if (value < 35) return sum + 4;
-    return sum;
-  }, 0);
+  const dangerPenalty = dangerPenaltyFor(family);
   const resilienceBonus = dangerPenalty === 0 ? 6 : 0;
   return clamp(
     core -
@@ -443,15 +437,44 @@ function scoreFamily(family) {
   );
 }
 
+function dangerPenaltyFor(family) {
+  const dangerMeters = ["minFood", "minHealth", "minHope", "minEducation", "minStability", "minSavings"];
+  return dangerMeters.reduce((sum, key) => {
+    const value = family[key] ?? 100;
+    if (value < 10) return sum + 18;
+    if (value < 25) return sum + 10;
+    if (value < 35) return sum + 4;
+    return sum;
+  }, 0);
+}
+
 function scoreNotes(family) {
   const notes = [];
   if ((family.rushedChoiceCount || 0) > 0) notes.push(`${family.rushedChoiceCount} rushed`);
-  if ((family.patternPenalty || 0) > 0) notes.push(`${family.patternPenalty} pattern penalty`);
+  if ((family.patternPenalty || 0) > 0) notes.push(`${family.patternPenalty} predictable play`);
   if ((family.communityMemoryHits || 0) > 0) notes.push(`${family.communityMemoryHits} trust exclusion`);
   if ((family.exploitMarkers || 0) > 0) notes.push(`${family.exploitMarkers} exploit markers`);
   if (family.gameOver) notes.push("collapse penalty");
   if (objectiveResult(family).completed) notes.push("+10 objective");
   return notes;
+}
+
+function scoreBreakdown(family) {
+  const objective = objectiveResult(family);
+  const base = Math.round((family.food + family.health + family.savings + family.hope + family.education + family.stability) / 6);
+  const dangerPenalty = dangerPenaltyFor(family);
+  const reputationBonus = Math.round(((family.reputation ?? 50) - 50) * 0.22);
+  const parts = [`meters ${base}`, `debt -${Math.round(family.debt * 0.28)}`];
+  if (dangerPenalty) parts.push(`danger lows -${dangerPenalty}`);
+  if (reputationBonus) parts.push(`trust ${reputationBonus > 0 ? "+" : ""}${reputationBonus}`);
+  if (family.exploitMarkers) parts.push(`betrayal -${family.exploitMarkers * 5}`);
+  if (family.rushedChoiceCount) parts.push(`rushed -${family.rushedChoiceCount * 2}`);
+  if (family.patternPenalty) parts.push(`predictable play -${family.patternPenalty}`);
+  if (family.communityMemoryHits) parts.push(`community exclusion -${family.communityMemoryHits * 3}`);
+  if (family.gameOver) parts.push("collapse -25");
+  if (!dangerPenalty) parts.push("no danger lows +6");
+  if (objective.completed) parts.push("objective +10");
+  return parts.join(" · ");
 }
 
 function flattenChoices(family) {
@@ -686,6 +709,7 @@ function App() {
   const isFinalPhase = phaseIndex >= phases.length - 1;
   const isResultsPhase = phase.id === "results";
   const isRecoveryPhase = phase.id === "recovery";
+  const previousPhaseId = phases[phaseIndex - 1]?.id;
   const activePlayer = players.find((p) => p.id === activePlayerId) || players[0];
   const activeRoundPlayers = players.filter((p) => !p.gameOver);
   const submittedChoices = activePlayer?.choices?.[phase.id] || [];
@@ -725,7 +749,8 @@ function App() {
         image: "work-relief-market.png",
       });
     }
-    if (activePlayer.hiringResult && activePlayer.hiringResult.phaseId !== phase.id) {
+    const hasCurrentJobLoss = activePlayer.employmentShock?.phaseId === phase.id;
+    if (activePlayer.hiringResult && activePlayer.hiringResult.phaseId === previousPhaseId && !hasCurrentJobLoss) {
       notices.push({
         key: `${activePlayer.id}-${activePlayer.hiringResult.phaseId}-hiring`,
         type: "hiring",
@@ -736,7 +761,7 @@ function App() {
       });
     }
     return notices;
-  }, [activePlayer, isResultsPhase, phase.id]);
+  }, [activePlayer, isResultsPhase, phase.id, previousPhaseId]);
   const activePrivateNotice = privateNotices.find((notice) => !dismissedNoticeKeys.includes(notice.key));
 
   useEffect(() => {
@@ -945,6 +970,7 @@ function App() {
   function toggleChoice(choice) {
     setSelected((current) => {
       if (current.includes(choice)) return current.filter((item) => item !== choice);
+      if (WORK_CHOICES.has(choice) && current.some((item) => WORK_CHOICES.has(item))) return current;
       return current.length >= 2 ? [current[1], choice] : [...current, choice];
     });
   }
@@ -1053,7 +1079,7 @@ function App() {
             <img src={asset(phase.image)} alt="" />
             <div className="phase-reveal-copy">
               <p className="gd-kicker">{isResultsPhase ? "Final Ledgers" : `Market Conditions - ${phase.years}`}</p>
-              <h2>{isResultsPhase ? "Who kept the dream alive?" : phase.title}</h2>
+              <h2>{isResultsPhase ? "Who best kept the dream alive?" : phase.title}</h2>
             </div>
           </div>
         )}
@@ -1116,20 +1142,26 @@ function App() {
                         </div>
                       )}
                       <div className="gd-choice-grid">
-                        {activeChoices.map(([id, title, detail], index) => (
-                          <button
-                            key={id}
-                            className={[
-                              selected.includes(id) ? "selected" : "",
-                              `choice-${choiceTone(id)}`,
-                            ].filter(Boolean).join(" ")}
-                            onClick={() => toggleChoice(id)}
-                          >
-                            <span>{String.fromCharCode(65 + index)}</span>
-                            <strong>{title}</strong>
-                            <em>{detail}</em>
-                          </button>
-                        ))}
+                        {activeChoices.map(([id, title, detail], index) => {
+                          const blockedByWorkRule = !selected.includes(id) && WORK_CHOICES.has(id) && selected.some((item) => WORK_CHOICES.has(item));
+                          return (
+                            <button
+                              key={id}
+                              className={[
+                                selected.includes(id) ? "selected" : "",
+                                blockedByWorkRule ? "choice-disabled" : "",
+                                `choice-${choiceTone(id)}`,
+                              ].filter(Boolean).join(" ")}
+                              onClick={() => toggleChoice(id)}
+                              disabled={blockedByWorkRule}
+                              title={blockedByWorkRule ? "Choose only one work action this round." : undefined}
+                            >
+                              <span>{String.fromCharCode(65 + index)}</span>
+                              <strong>{title}</strong>
+                              <em>{blockedByWorkRule ? "Choose only one work action this round." : detail}</em>
+                            </button>
+                          );
+                        })}
                       </div>
                       <button className="gd-submit" onClick={submitChoices} disabled={selected.length !== 2 || isBusy}>
                         {isBusy ? "Submitting..." : "Submit choices"}
@@ -1321,7 +1353,7 @@ function ResultsPhase({
           {players.map((player, index) => (
             <LeaderboardRow player={player} index={index} key={player.id} />
           ))}
-          <p className="gd-note">Scores include danger penalties, debt, trust reputation, exploit markers, rushed decisions, repeated-pattern penalties, community memory, and family objectives.</p>
+          <p className="gd-note">Each row shows how that family reached its score. Higher meters help; debt, danger lows, collapse, betrayal, rushed play, predictable play, and community exclusion pull the score down.</p>
         </div>
 
         <div className="gd-panel results-awards">
@@ -1546,7 +1578,7 @@ function Leaderboard({ players, shared, scenario, rematchScenario, title = "Fina
       {players.map((player, index) => (
         <LeaderboardRow player={player} index={index} key={player.id} />
       ))}
-      <p className="gd-note">Scores include danger penalties, debt, trust reputation, exploit markers, rushed decisions, repeated-pattern penalties, community memory, and family objectives.</p>
+      <p className="gd-note">Each row shows how that family reached its score. Higher meters help; debt, danger lows, collapse, betrayal, rushed play, predictable play, and community exclusion pull the score down.</p>
       {showAwards && <div className="award-grid">
         {awards.map((award) => (
           <div className={award.primary ? "award-card primary" : "award-card"} key={award.id}>
@@ -1591,6 +1623,7 @@ function LeaderboardRow({ player, index }) {
         {player.objectiveTitle && (
           <small>{objective.completed ? "+10" : "0"} objective: {player.objectiveTitle}</small>
         )}
+        <small className="score-breakdown">Score path: {scoreBreakdown(player)}</small>
         {!!notes.length && <small className="score-notes">{notes.join(" · ")}</small>}
       </span>
       <strong>{player.score}</strong>

@@ -10,7 +10,7 @@ const phaseChoices = [
   ["cut_food_rent", "hoard_relief"],
   ["apply_public_works", "contribute_community_pot"],
   ["stay_public_works", "hoard_relief"],
-  ["stay_public_works", "undercut_wages"],
+  ["stay_public_works", "contribute_community_pot"],
   ["seek_defense_work", "inform_on_black_market"],
 ];
 
