@@ -9,3 +9,9 @@ Original prompt: Build a 10-25 minute multiplayer learning game where colleagues
 - Added host scenario selection for new/rematch rooms, delayed private pop-ups until after the phase reveal, removed doubled recovery panels, and added anti-gaming memory for rushed/repeated/exploit-heavy play.
 - Refined host scenario buttons into compact cards with shorter scenario summaries.
 - Made scarcity more visible in Town Hall and added private post-phase hiring result pop-ups for scarce work applicants.
+
+## 2026-06-27
+
+- Added true emergency collapse choices: dangerous health/food/hope/debt warnings now expose a red emergency action; ignoring it causes the family closing screen on the next phase, while selecting it rescues the family and clears the warning.
+- Linked host-created rematch rooms back to the finished room so players on the final results screen can join the next game after the host starts it.
+- Fixed fresh `?room=CODE` links so new browsers/phones land on the join screen even with no saved local game state.

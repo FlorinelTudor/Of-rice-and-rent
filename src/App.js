@@ -6,6 +6,12 @@ const MAX_PLAYERS = 8;
 const GAME_STATE_VERSION = "blob-multiplayer-v2";
 const COOPERATIVE_CHOICES = new Set(["join_mutual_aid", "organize_neighbors", "support_union", "sponsor_neighbor", "contribute_community_pot"]);
 const BETRAYAL_CHOICES = new Set(["hoard_relief", "undercut_wages", "inform_on_black_market"]);
+const EMERGENCY_CHOICE_LABELS = {
+  emergency_health: ["Emergency clinic visit", "Danger: treat health now or the family may receive a closing screen next phase."],
+  emergency_food: ["Emergency food line", "Danger: secure food now or the family may receive a closing screen next phase."],
+  emergency_hope: ["Emergency family reset", "Danger: rebuild hope now or the family may receive a closing screen next phase."],
+  emergency_debt: ["Emergency debt settlement", "Danger: settle debt now or the family may receive a closing screen next phase."],
+};
 const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market"]);
 const WORK_OR_RELIEF_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "accept_relief", "seek_charity_clinic", "hoard_relief"]);
 const MOBILITY_CHOICES = new Set(["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"]);
@@ -298,6 +304,10 @@ const extremeChoiceRules = [
 
 function getExtremeChoices(family, phaseId) {
   if (!family) return [];
+  const emergencyId = family.collapseWarning?.emergencyChoiceId;
+  const emergencyChoices = emergencyId && EMERGENCY_CHOICE_LABELS[emergencyId]
+    ? [[emergencyId, ...EMERGENCY_CHOICE_LABELS[emergencyId]]]
+    : [];
   const choices = extremeChoiceRules
     .filter((rule) => rule.when(family))
     .slice(0, 2)
@@ -308,7 +318,7 @@ function getExtremeChoices(family, phaseId) {
       ["take_desperate_work", "Take desperate day work", "Job loss: gain food and cash, risk health and stability."]
     );
   }
-  return choices.slice(0, 3);
+  return [...emergencyChoices, ...choices].slice(0, 4);
 }
 
 function familyImageFor(family) {
@@ -383,6 +393,7 @@ function countChoices(family, choiceSet) {
 }
 
 function choiceTone(choiceId) {
+  if (choiceId.startsWith("emergency_")) return "emergency";
   if (choiceId === "contribute_community_pot" || COOPERATIVE_CHOICES.has(choiceId)) return "cooperate";
   if (BETRAYAL_CHOICES.has(choiceId)) return "betray";
   return "neutral";
@@ -541,12 +552,13 @@ function loadSavedGame() {
       window.localStorage.removeItem("gd-game-state");
       return {};
     }
-    if (saved.version !== GAME_STATE_VERSION) return {};
-    if (saved.view === "host" && !saved.hostToken) return {};
     if (joinCode) {
+      if (saved.version !== GAME_STATE_VERSION) return { view: "join", roomCode: joinCode };
       if (saved.roomCode === joinCode && (saved.activePlayerId || saved.hostToken)) return saved;
       return { view: "join", roomCode: joinCode };
     }
+    if (saved.version !== GAME_STATE_VERSION) return {};
+    if (saved.view === "host" && !saved.hostToken) return {};
     return saved;
   } catch {
     return {};
@@ -584,6 +596,7 @@ function App() {
   const [shared, setShared] = useState(savedGame.shared || null);
   const [scenario, setScenario] = useState(savedGame.scenario || null);
   const [rematchScenario, setRematchScenario] = useState(savedGame.rematchScenario || null);
+  const [nextRoomCode, setNextRoomCode] = useState(savedGame.nextRoomCode || "");
   const [selectedScenarioId, setSelectedScenarioId] = useState(savedGame.selectedScenarioId || "easy_credit");
   const [phaseIndex, setPhaseIndex] = useState(savedGame.phaseIndex || 0);
   const [playerName, setPlayerName] = useState(savedGame.playerName || "");
@@ -682,6 +695,7 @@ function App() {
         shared,
         scenario,
         rematchScenario,
+        nextRoomCode,
         selectedScenarioId,
         phaseIndex,
         playerName,
@@ -691,7 +705,7 @@ function App() {
         joinClientId: joinClientIdRef.current,
       })
     );
-  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, selectedScenarioId, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt]);
+  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt]);
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
@@ -709,6 +723,7 @@ function App() {
     setShared(room.shared || null);
     setScenario(room.scenario || null);
     setRematchScenario(room.rematchScenario || null);
+    setNextRoomCode(room.nextRoomCode || "");
     setPhaseIndex(room.phaseIndex || 0);
     setLastSyncedAt(Date.now());
   }
@@ -721,6 +736,7 @@ function App() {
     setShared(null);
     setScenario(null);
     setRematchScenario(null);
+    setNextRoomCode("");
     setPhaseIndex(0);
     setActivePlayerId("");
     setSelected([]);
@@ -775,12 +791,18 @@ function App() {
   }, [rematchScenario?.id]);
 
   async function createHostRoom(scenarioId = selectedScenarioId) {
-    const data = await runGameRequest(() => gameApi("/game/rooms", { method: "POST", body: JSON.stringify({ scenario_id: scenarioId }) }));
+    const payload = { scenario_id: scenarioId };
+    if (isResultsPhase && roomCode && hostToken) {
+      payload.previous_room_code = roomCode;
+      payload.host_token = hostToken;
+    }
+    const data = await runGameRequest(() => gameApi("/game/rooms", { method: "POST", body: JSON.stringify(payload) }));
     if (!data) return;
     syncRoom(data.room);
     setHostToken(data.hostToken || "");
     setActivePlayerId("");
     setSelected([]);
+    setNextRoomCode("");
     setSelectedScenarioId(data.room?.scenario?.id || scenarioId);
     setView("host");
   }
@@ -807,6 +829,24 @@ function App() {
       gameApi(`/game/rooms/${code}/join`, {
         method: "POST",
         body: JSON.stringify({ room_code: code, player_name: playerName.trim() || "Player", client_id: joinClientIdRef.current }),
+      })
+    );
+    if (!data) return;
+    syncRoom(data.room);
+    setHostToken("");
+    setActivePlayerId(data.playerId);
+    setSelected([]);
+    setView("player");
+  }
+
+  async function joinNextRoom(code = nextRoomCode) {
+    const nextCode = String(code || "").trim().toUpperCase();
+    if (!nextCode) return;
+    const returningName = activePlayer?.playerName || playerName.trim() || "Player";
+    const data = await runGameRequest(() =>
+      gameApi(`/game/rooms/${nextCode}/join`, {
+        method: "POST",
+        body: JSON.stringify({ room_code: nextCode, player_name: returningName, client_id: joinClientIdRef.current }),
       })
     );
     if (!data) return;
@@ -954,6 +994,8 @@ function App() {
                 selectedScenarioId={selectedScenarioId}
                 onSelectScenario={setSelectedScenarioId}
                 onCreateScenario={createHostRoom}
+                nextRoomCode={nextRoomCode}
+                onJoinNextRoom={joinNextRoom}
               />
             ) : (
               <>
@@ -993,6 +1035,12 @@ function App() {
                     <img src={asset("new-deal-choice-background.png")} alt="" />
                     <div className="gd-choice-content">
                       <p className="gd-kicker">Choose 2 Actions</p>
+                      {activePlayer?.collapseWarning && (
+                        <div className="emergency-choice-banner">
+                          <strong>Emergency decision required</strong>
+                          <span>Select the red emergency card this phase to keep this family in the game.</span>
+                        </div>
+                      )}
                       <div className="gd-choice-grid">
                         {activeChoices.map(([id, title, detail], index) => (
                           <button
@@ -1140,7 +1188,19 @@ function FamilyGameOver({ family }) {
   );
 }
 
-function ResultsPhase({ players, shared, scenario, rematchScenario, view, isBusy, selectedScenarioId, onSelectScenario, onCreateScenario }) {
+function ResultsPhase({
+  players,
+  shared,
+  scenario,
+  rematchScenario,
+  view,
+  isBusy,
+  selectedScenarioId,
+  onSelectScenario,
+  onCreateScenario,
+  nextRoomCode,
+  onJoinNextRoom,
+}) {
   const awards = computeAwards(players, scenario);
   const debrief = historicalDebrief(players, shared);
   const selectedScenario = SCENARIO_OPTIONS.find((option) => option.id === selectedScenarioId) || SCENARIO_OPTIONS[0];
@@ -1207,6 +1267,12 @@ function ResultsPhase({ players, shared, scenario, rematchScenario, view, isBusy
               {isBusy ? "Creating..." : `Create next run: ${selectedScenario.title}`}
             </button>
           )}
+          {view !== "host" && nextRoomCode && (
+            <button onClick={() => onJoinNextRoom(nextRoomCode)} disabled={isBusy}>
+              Join next game: Room {nextRoomCode}
+            </button>
+          )}
+          {view !== "host" && !nextRoomCode && <small>Waiting for the host to start the next room.</small>}
         </div>
       </section>
     </div>

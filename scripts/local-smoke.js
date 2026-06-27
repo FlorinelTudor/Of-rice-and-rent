@@ -105,9 +105,83 @@ async function assertScenarioSelection(baseUrl) {
   }
 }
 
+async function assertEmergencyCollapse(baseUrl) {
+  let created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({ test_family_overrides: { health: 0 } }) });
+  let roomCode = created.room.roomCode;
+  let joined = await request(baseUrl, `/rooms/${roomCode}/join`, {
+    method: "POST",
+    body: JSON.stringify({ player_name: "Emergency Probe", client_id: `emergency-ignore-${Date.now()}` }),
+  });
+  let player = joined.room.players[0];
+  if (player.collapseWarning?.emergencyChoiceId !== "emergency_health") {
+    throw new Error(`Expected low health to expose emergency_health, got ${player.collapseWarning?.emergencyChoiceId || "none"}`);
+  }
+  let state = await request(baseUrl, `/rooms/${roomCode}/choices`, {
+    method: "POST",
+    body: JSON.stringify({ player_id: player.id, choices: ["keep_factory_job", "contribute_community_pot"] }),
+  });
+  player = state.room.players[0];
+  if (!player.gameOver || player.gameOver.reason !== "health") {
+    throw new Error("Expected ignoring a health emergency option to end the family next phase.");
+  }
+
+  created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({ test_family_overrides: { health: 0 } }) });
+  roomCode = created.room.roomCode;
+  joined = await request(baseUrl, `/rooms/${roomCode}/join`, {
+    method: "POST",
+    body: JSON.stringify({ player_name: "Emergency Rescue", client_id: `emergency-rescue-${Date.now()}` }),
+  });
+  player = joined.room.players[0];
+  state = await request(baseUrl, `/rooms/${roomCode}/choices`, {
+    method: "POST",
+    body: JSON.stringify({ player_id: player.id, choices: ["emergency_health", "keep_factory_job"] }),
+  });
+  player = state.room.players[0];
+  if (player.gameOver || player.collapseWarning || player.health <= 0) {
+    throw new Error("Expected choosing the health emergency option to rescue the family and clear the warning.");
+  }
+}
+
+async function assertRematchJoinLink(baseUrl) {
+  const { roomCode, hostToken } = await createFullRoom(baseUrl, "Rematch Probe");
+  let state = await request(baseUrl, `/rooms/${roomCode}`);
+  for (let round = 0; round < phaseChoices.length; round += 1) {
+    await Promise.all(
+      state.room.players.map((player) =>
+        request(baseUrl, `/rooms/${roomCode}/choices`, {
+          method: "POST",
+          body: JSON.stringify({ player_id: player.id, choices: phaseChoices[round] }),
+        })
+      )
+    );
+    state = await request(baseUrl, `/rooms/${roomCode}`);
+  }
+  state = await request(baseUrl, `/rooms/${roomCode}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ host_token: hostToken }),
+  });
+  const next = await request(baseUrl, "/rooms", {
+    method: "POST",
+    body: JSON.stringify({ scenario_id: "harsh_winter", previous_room_code: roomCode, host_token: hostToken }),
+  });
+  const oldRoom = await request(baseUrl, `/rooms/${roomCode}`);
+  if (oldRoom.room.nextRoomCode !== next.room.roomCode) {
+    throw new Error("Expected finished room to expose the host-created next room code.");
+  }
+  const rejoined = await request(baseUrl, `/rooms/${oldRoom.room.nextRoomCode}/join`, {
+    method: "POST",
+    body: JSON.stringify({ player_name: "Returning Player", client_id: `returning-${Date.now()}` }),
+  });
+  if (rejoined.room.players.length !== 1 || rejoined.room.players[0].playerName !== "Returning Player") {
+    throw new Error("Expected a finished-game player to join the host's next room.");
+  }
+}
+
 async function main() {
   const baseUrl = getBaseUrl();
   await assertScenarioSelection(baseUrl);
+  await assertEmergencyCollapse(baseUrl);
+  await assertRematchJoinLink(baseUrl);
   await assertHardBetrayal(baseUrl);
   const { roomCode, hostToken } = await createFullRoom(baseUrl, "Local Player");
 
@@ -134,8 +208,12 @@ async function main() {
 
   for (let round = 0; round < phaseChoices.length; round += 1) {
     const choices = phaseChoices[round];
+    const activePlayers = state.room.players.filter((player) => !player.gameOver);
+    if (!activePlayers.length) {
+      throw new Error(`Expected at least one active family before round ${round + 1}`);
+    }
     await Promise.all(
-      state.room.players.map((player) =>
+      activePlayers.map((player) =>
         request(baseUrl, `/rooms/${roomCode}/choices`, {
           method: "POST",
           body: JSON.stringify({ player_id: player.id, choices }),
@@ -166,8 +244,9 @@ async function main() {
       if (state.room.shared.activePolicy?.id !== "emergency_banking_act") {
         throw new Error("Expected the 1933 Emergency Banking Act policy to be active");
       }
-      if (state.room.players.some((player) => !player.policyHistory?.some((policy) => policy.id === "emergency_banking_act"))) {
-        throw new Error("Expected every family to record the 1933 banking policy effect");
+      const activeAfterPolicy = state.room.players.filter((player) => !player.gameOver);
+      if (activeAfterPolicy.some((player) => !player.policyHistory?.some((policy) => policy.id === "emergency_banking_act"))) {
+        throw new Error("Expected every active family to record the 1933 banking policy effect");
       }
     }
   }

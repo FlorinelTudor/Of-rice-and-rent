@@ -28,6 +28,32 @@ const COLLAPSE_REASONS = {
     detail: "Debt stayed at or above 100 for more than a phase. Creditors, rent, and obligations have overtaken the household plan.",
   },
 };
+const EMERGENCY_ACTIONS = {
+  health: {
+    id: "emergency_health",
+    title: "Emergency clinic visit",
+    detail: "Spend everything you can to get the family treated now.",
+    impact: { health: 38, savings: -18, debt: 12, hope: 4 },
+  },
+  food: {
+    id: "emergency_food",
+    title: "Emergency food line",
+    detail: "Ask for immediate food help, even if pride and reputation suffer.",
+    impact: { food: 38, hope: -6, reputation: -8 },
+  },
+  hope: {
+    id: "emergency_hope",
+    title: "Emergency family reset",
+    detail: "Stop chasing gains and spend the round rebuilding morale.",
+    impact: { hope: 38, savings: -10, stability: 8 },
+  },
+  debt: {
+    id: "emergency_debt",
+    title: "Emergency debt settlement",
+    detail: "Liquidate what you can and renegotiate before creditors close in.",
+    impact: { debt: -38, savings: -20, hope: -6, stability: 5 },
+  },
+};
 const PORT = Number(process.env.PORT || 4173);
 const PHASE_IDS = [
   "postwar",
@@ -214,6 +240,10 @@ const IMPACTS = {
   hoard_relief: { food: 18, savings: 8, hope: -5, reputation: -14 },
   undercut_wages: { savings: 19, stability: -12, hope: -8, reputation: -12 },
   inform_on_black_market: { savings: 16, stability: 8, hope: -10, reputation: -16 },
+  emergency_health: EMERGENCY_ACTIONS.health.impact,
+  emergency_food: EMERGENCY_ACTIONS.food.impact,
+  emergency_hope: EMERGENCY_ACTIONS.hope.impact,
+  emergency_debt: EMERGENCY_ACTIONS.debt.impact,
 };
 
 const ACTION_DYNAMICS = {
@@ -237,6 +267,7 @@ const ACTION_DYNAMICS = {
 };
 
 function choicePattern(choice) {
+  if (choice.startsWith("emergency_")) return "emergency";
   if (["take_store_credit", "buy_radio_credit", "borrow_to_invest"].includes(choice)) return "credit";
   if (["invest_stocks", "sell_stocks_now", "withdraw_bank_cash"].includes(choice)) return "speculation";
   if (["cut_food_rent", "sell_possessions", "pawn_heirloom", "delay_medical_care"].includes(choice)) return "austerity";
@@ -381,12 +412,17 @@ function publicRoom(room) {
     players: room.players || [],
     scenario,
     rematchScenario: room.phase_index >= PHASE_IDS.length - 1 ? rematchScenario(scenario.id) : null,
+    nextRoomCode: room.next_room_code || null,
     shared: sharedSnapshot(room, phaseId),
     updatedAt: room.updated_at,
   };
 }
 
-function pickFamily(playerName, index, clientId) {
+function emergencyActionForReason(reason) {
+  return EMERGENCY_ACTIONS[reason] || null;
+}
+
+function pickFamily(playerName, index, clientId, overrides = null) {
   const family = { ...STARTING_FAMILIES[index % STARTING_FAMILIES.length] };
   const objective = objectiveVariantForFamily(family, index, clientId);
   if (objective) {
@@ -411,12 +447,32 @@ function pickFamily(playerName, index, clientId) {
     family[key] = clamp(family[key] + crypto.randomInt(17) - 8);
   });
   family.debt = Math.max(0, Math.round(family.debt + crypto.randomInt(21) - 10));
+  if (overrides && typeof overrides === "object") {
+    Object.entries(overrides).forEach(([key, value]) => {
+      if (["food", "health", "savings", "hope", "education", "stability", "bankTrust"].includes(key)) family[key] = clamp(value);
+      if (key === "debt") family.debt = Math.max(0, Math.min(100, Math.round(value)));
+    });
+  }
   family.initialHardship = Math.round(100 - (family.food + family.health + family.savings + family.hope + family.education + family.stability) / 6 + family.debt * 0.25);
   return family;
 }
 
 function applyChoices(family, choices, phaseId, options = {}) {
   const next = { ...family, choices: { ...(family.choices || {}) } };
+  const warning = family.collapseWarning;
+  const emergencyAction = warning ? emergencyActionForReason(warning.reason) : null;
+  if (emergencyAction && choices.includes(emergencyAction.id)) {
+    delete next.collapseWarning;
+    delete next.ignoredCollapseWarning;
+    next.emergencyRescues = (next.emergencyRescues || 0) + 1;
+  } else if (warning) {
+    next.ignoredCollapseWarning = {
+      reason: warning.reason,
+      phaseId: warning.phaseId,
+      title: warning.title,
+      detail: warning.detail,
+    };
+  }
   const patternMultiplier = antiGamingMultiplier(family, choices);
   const multiplier = positiveImpactMultiplier(family, options.rushed) * patternMultiplier;
   next.choiceRepeatCounts = { ...(family.choiceRepeatCounts || {}) };
@@ -516,11 +572,24 @@ function collapseReason(family) {
 function applyCollapseChecks(room, phaseId, { allowGameOver = true } = {}) {
   room.players = (room.players || []).map((player) => {
     if (player.gameOver) return player;
+    if (player.ignoredCollapseWarning && player.ignoredCollapseWarning.phaseId !== phaseId) {
+      const reason = player.ignoredCollapseWarning.reason;
+      return {
+        ...player,
+        gameOver: {
+          reason,
+          phaseId,
+          title: COLLAPSE_REASONS[reason].title,
+          detail: COLLAPSE_REASONS[reason].detail,
+        },
+      };
+    }
     const reason = collapseReason(player);
     if (!reason) {
-      const { collapseWarning, ...rest } = player;
+      const { collapseWarning, ignoredCollapseWarning, ...rest } = player;
       return rest;
     }
+    if (player.collapseWarning && !allowGameOver) return player;
     if (allowGameOver && player.collapseWarning && player.collapseWarning.phaseId !== phaseId) {
       return {
         ...player,
@@ -538,7 +607,10 @@ function applyCollapseChecks(room, phaseId, { allowGameOver = true } = {}) {
         reason,
         phaseId,
         title: COLLAPSE_REASONS[reason].title,
-        detail: "Danger zone: recover this meter before the next phase check or this family will receive a closing screen.",
+        detail: `Danger zone: choose "${emergencyActionForReason(reason).title}" this phase or this family will receive a closing screen next phase.`,
+        emergencyChoiceId: emergencyActionForReason(reason).id,
+        emergencyTitle: emergencyActionForReason(reason).title,
+        emergencyDetail: emergencyActionForReason(reason).detail,
       },
     };
   });
@@ -774,6 +846,7 @@ app.post("/api/game/rooms", (req, res) => {
       room_code: code,
       host_token: crypto.randomBytes(32).toString("base64url"),
       scenario_id: scenario.id,
+      test_family_overrides: req.body?.test_family_overrides || null,
       phase_index: 0,
       players: [],
       created_at: now,
@@ -783,6 +856,12 @@ app.post("/api/game/rooms", (req, res) => {
       updated_at: now,
     };
     rooms.set(code, room);
+    const previousCode = String(req.body?.previous_room_code || "").trim().toUpperCase();
+    const previousRoom = previousCode ? rooms.get(previousCode) : null;
+    if (previousRoom && req.body?.host_token === previousRoom.host_token) {
+      previousRoom.next_room_code = code;
+      previousRoom.updated_at = now;
+    }
     res.json({ room: publicRoom(room), hostToken: room.host_token });
     return;
   }
@@ -807,8 +886,9 @@ app.post("/api/game/rooms/:roomCode/join", (req, res) => {
     res.status(409).json({ detail: `Room is full (${MAX_PLAYERS} players max).` });
     return;
   }
-  const player = pickFamily(String(req.body.player_name || "Player").trim() || "Player", room.players.length, clientId);
+  const player = pickFamily(String(req.body.player_name || "Player").trim() || "Player", room.players.length, clientId, room.test_family_overrides);
   room.players.push(player);
+  applyCollapseChecks(room, PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)], { allowGameOver: false });
   room.updated_at = new Date().toISOString();
   res.json({ room: publicRoom(room), playerId: player.id });
 });
