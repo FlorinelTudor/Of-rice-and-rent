@@ -240,6 +240,12 @@ const IMPACTS = {
   hoard_relief: { food: 18, savings: 8, hope: -5, reputation: -14 },
   undercut_wages: { savings: 19, stability: -12, hope: -8, reputation: -12 },
   inform_on_black_market: { savings: 16, stability: 8, hope: -10, reputation: -16 },
+  final_food_surplus: { food: -8, stability: 12, hope: 8, reputation: 8 },
+  final_health_shift: { savings: 16, hope: 8, health: -6 },
+  final_savings_invest: { stability: 14, debt: -8, savings: -8 },
+  final_hope_leadership: { hope: 8, stability: 9, reputation: 12 },
+  final_education_training: { education: 10, savings: 14, stability: 8 },
+  final_stability_settle: { stability: 12, debt: -12, hope: 6 },
   emergency_health: EMERGENCY_ACTIONS.health.impact,
   emergency_food: EMERGENCY_ACTIONS.food.impact,
   emergency_hope: EMERGENCY_ACTIONS.hope.impact,
@@ -261,6 +267,10 @@ const ACTION_DYNAMICS = {
   support_union: ["cooperate"],
   sponsor_neighbor: ["cooperate"],
   contribute_community_pot: ["cooperate"],
+  final_food_surplus: ["cooperate"],
+  final_hope_leadership: ["cooperate"],
+  final_education_training: ["work"],
+  final_health_shift: ["work"],
   hoard_relief: ["relief", "betray"],
   undercut_wages: ["work", "betray"],
   inform_on_black_market: ["betray"],
@@ -268,6 +278,7 @@ const ACTION_DYNAMICS = {
 
 function choicePattern(choice) {
   if (choice.startsWith("emergency_")) return "emergency";
+  if (choice.startsWith("final_")) return "final_bonus";
   if (["take_store_credit", "buy_radio_credit", "borrow_to_invest"].includes(choice)) return "credit";
   if (["invest_stocks", "sell_stocks_now", "withdraw_bank_cash"].includes(choice)) return "speculation";
   if (["cut_food_rent", "sell_possessions", "pawn_heirloom", "delay_medical_care"].includes(choice)) return "austerity";
@@ -333,15 +344,15 @@ const POLICY_EFFECTS = {
 };
 
 const STARTING_FAMILIES = [
-  { name: "Carter", profile: "Cleveland factory household", role: "Industrial wage earners", objectiveId: "industrial_stability", objectiveTitle: "Hold the household together", objectiveDetail: "Finish with Stability 60+ while keeping trust at 45+.", food: 55, health: 62, savings: 28, debt: 42, hope: 58, education: 64, stability: 54, bankTrust: 55, stock: 0 },
-  { name: "Rosen", profile: "Small shop owners", role: "Main Street merchants", objectiveId: "shopkeeper_debt", objectiveTitle: "Keep the shop solvent", objectiveDetail: "Finish with Debt 45 or lower and Hope 45+.", food: 60, health: 58, savings: 44, debt: 48, hope: 62, education: 68, stability: 48, bankTrust: 62, stock: 0 },
-  { name: "Williams", profile: "Tenant farm family", role: "Rural tenant farmers", objectiveId: "tenant_food", objectiveTitle: "Keep food on the table", objectiveDetail: "Finish with Food 50+ or successfully use a migration/work-camp path.", food: 48, health: 55, savings: 18, debt: 55, hope: 52, education: 50, stability: 42, bankTrust: 45, stock: 0 },
-  { name: "Novak", profile: "Recent immigrant industrial household", role: "New arrival workers", objectiveId: "immigrant_trust", objectiveTitle: "Build standing", objectiveDetail: "Finish with Trust 65+ or Education 60+.", food: 52, health: 59, savings: 22, debt: 38, hope: 56, education: 58, stability: 45, bankTrust: 50, stock: 0 },
-  { name: "O'Connor", profile: "Railroad worker household", role: "Rail and transport workers", objectiveId: "railroad_mobility", objectiveTitle: "Keep moving, stay healthy", objectiveDetail: "Use at least 2 work or mobility actions and finish with Health 45+.", food: 57, health: 60, savings: 24, debt: 36, hope: 57, education: 61, stability: 52, bankTrust: 54, stock: 0 },
-  { name: "Bianchi", profile: "Garment district family", role: "Urban garment workers", objectiveId: "garment_solidarity", objectiveTitle: "Stand with the neighborhood", objectiveDetail: "Use at least 2 community/labor actions and finish with Hope 55+.", food: 54, health: 57, savings: 30, debt: 44, hope: 60, education: 63, stability: 47, bankTrust: 52, stock: 0 },
-  { name: "Johnson", profile: "Black urban service family", role: "Urban service workers", objectiveId: "service_respect", objectiveTitle: "Earn respect under pressure", objectiveDetail: "Finish with Stability 50+ and Trust 60+.", food: 50, health: 56, savings: 16, debt: 46, hope: 55, education: 59, stability: 40, bankTrust: 42, stock: 0 },
-  { name: "Kowalski", profile: "Coal town mining family", role: "Mining household", objectiveId: "miner_health", objectiveTitle: "Survive dangerous work", objectiveDetail: "Finish with Health 45+ and Debt 55 or lower.", food: 53, health: 51, savings: 20, debt: 50, hope: 50, education: 52, stability: 43, bankTrust: 47, stock: 0 },
-  { name: "Martinez", profile: "Seasonal farm labor family", role: "Migrant farm workers", objectiveId: "seasonal_work", objectiveTitle: "Find enough work", objectiveDetail: "Finish with Food 45+ and use at least 2 work or relief actions.", food: 46, health: 54, savings: 14, debt: 40, hope: 54, education: 48, stability: 38, bankTrust: 43, stock: 0 },
+  { name: "Carter", profile: "Cleveland factory household", role: "Industrial wage earners", objectiveId: "industrial_stability", objectiveTitle: "Hold the household together", objectiveDetail: "Finish with Stability 60+ while keeping trust at 45+.", food: 55, health: 62, savings: 30, debt: 42, hope: 58, education: 62, stability: 56, bankTrust: 55, stock: 0 },
+  { name: "Rosen", profile: "Small shop owners", role: "Main Street merchants", objectiveId: "shopkeeper_debt", objectiveTitle: "Keep the shop solvent", objectiveDetail: "Finish with Debt 45 or lower and Hope 45+.", food: 61, health: 58, savings: 58, debt: 52, hope: 63, education: 70, stability: 52, bankTrust: 66, stock: 0 },
+  { name: "Williams", profile: "Tenant farm family", role: "Rural tenant farmers", objectiveId: "tenant_food", objectiveTitle: "Keep food on the table", objectiveDetail: "Finish with Food 50+ or successfully use a migration/work-camp path.", food: 56, health: 54, savings: 16, debt: 58, hope: 52, education: 46, stability: 40, bankTrust: 42, stock: 0 },
+  { name: "Novak", profile: "Recent immigrant industrial household", role: "New arrival workers", objectiveId: "immigrant_trust", objectiveTitle: "Build standing", objectiveDetail: "Finish with Trust 65+ or Education 60+.", food: 52, health: 59, savings: 20, debt: 36, hope: 58, education: 61, stability: 44, bankTrust: 48, stock: 0 },
+  { name: "O'Connor", profile: "Railroad worker household", role: "Rail and transport workers", objectiveId: "railroad_mobility", objectiveTitle: "Keep moving, stay healthy", objectiveDetail: "Use at least 2 work or mobility actions and finish with Health 45+.", food: 58, health: 58, savings: 30, debt: 36, hope: 57, education: 59, stability: 55, bankTrust: 54, stock: 0 },
+  { name: "Bianchi", profile: "Garment district family", role: "Urban garment workers", objectiveId: "garment_solidarity", objectiveTitle: "Stand with the neighborhood", objectiveDetail: "Use at least 2 community/labor actions and finish with Hope 55+.", food: 54, health: 56, savings: 26, debt: 44, hope: 62, education: 63, stability: 45, bankTrust: 51, stock: 0 },
+  { name: "Johnson", profile: "Black urban service family", role: "Urban service workers", objectiveId: "service_respect", objectiveTitle: "Earn respect under pressure", objectiveDetail: "Finish with Stability 50+ and Trust 60+.", food: 49, health: 56, savings: 14, debt: 46, hope: 56, education: 61, stability: 38, bankTrust: 40, stock: 0 },
+  { name: "Kowalski", profile: "Coal town mining family", role: "Mining household", objectiveId: "miner_health", objectiveTitle: "Survive dangerous work", objectiveDetail: "Finish with Health 45+ and Debt 55 or lower.", food: 54, health: 47, savings: 22, debt: 50, hope: 50, education: 50, stability: 44, bankTrust: 47, stock: 0 },
+  { name: "Martinez", profile: "Seasonal farm labor family", role: "Migrant farm workers", objectiveId: "seasonal_work", objectiveTitle: "Find enough work", objectiveDetail: "Finish with Food 45+ and use at least 2 work or relief actions.", food: 45, health: 53, savings: 12, debt: 38, hope: 55, education: 45, stability: 36, bankTrust: 41, stock: 0 },
 ];
 
 const rooms = new Map();

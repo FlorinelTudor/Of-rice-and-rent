@@ -27,6 +27,15 @@ const FAMILY_PORTRAITS = {
   Kowalski: "family-kowalski-mining.png",
   Martinez: "family-martinez-seasonal.png",
 };
+const DANGER_PORTRAITS = {
+  food: "family-food-crisis.png",
+  health: "family-health-crisis.png",
+  savings: "family-savings-crisis.png",
+  hope: "family-hope-crisis.png",
+  education: "family-education-crisis.png",
+  stability: "family-stability-crisis.png",
+  debt: "family-savings-crisis.png",
+};
 const SCENARIO_OPTIONS = [
   {
     id: "easy_credit",
@@ -248,7 +257,14 @@ const phases = [
     news: "Factories hire as orders surge",
     summary: "The long crisis gives way to mobilization, though not every family recovers equally.",
     conditions: [["Unemployment", "Falling", "good"], ["Bank confidence", "Recovering", "good"], ["Savings", "Rebuilding", "good"], ["Public support", "Shifting", "neutral"]],
-    choices: [],
+    choices: [
+      ["seek_defense_work", "Take wartime factory work", "A final push for income and hope, with family disruption risk."],
+      ["rebuild_savings", "Rebuild the family cushion", "Lock in resilience before the final score."],
+      ["repair_health", "Pay overdue health costs", "Strengthen survival, but spend scarce cash."],
+      ["keep_children_school", "Keep children in school", "Protect the next generation, even now."],
+      ["contribute_community_pot", "Share with the town", "Help the community pot and reputation at a personal cost."],
+      ["hoard_relief", "Grab extra relief", "A hard competitive edge that hurts trust if exposed."],
+    ],
   },
   {
     id: "results",
@@ -302,11 +318,63 @@ const extremeChoiceRules = [
   },
 ];
 
+const finalBonusChoiceRules = [
+  {
+    id: "final_food_surplus",
+    title: "Share a stocked pantry",
+    detail: "High food: convert surplus into trust and stability.",
+    metric: "food",
+    when: (family) => family.food >= 75,
+  },
+  {
+    id: "final_health_shift",
+    title: "Take a double shift",
+    detail: "High health: earn extra income before the final ledger.",
+    metric: "health",
+    when: (family) => family.health >= 75,
+  },
+  {
+    id: "final_savings_invest",
+    title: "Make a careful investment",
+    detail: "High savings: turn cash into long-term stability.",
+    metric: "savings",
+    when: (family) => family.savings >= 75,
+  },
+  {
+    id: "final_hope_leadership",
+    title: "Rally the neighborhood",
+    detail: "High hope: lift trust and protect the community pot.",
+    metric: "hope",
+    when: (family) => family.hope >= 75,
+  },
+  {
+    id: "final_education_training",
+    title: "Train for skilled work",
+    detail: "High education: claim better work and future security.",
+    metric: "education",
+    when: (family) => family.education >= 75,
+  },
+  {
+    id: "final_stability_settle",
+    title: "Settle the household",
+    detail: "High stability: lock in resilience and reduce debt pressure.",
+    metric: "stability",
+    when: (family) => family.stability >= 75,
+  },
+];
+
 function getExtremeChoices(family, phaseId) {
   if (!family) return [];
   const emergencyId = family.collapseWarning?.emergencyChoiceId;
   const emergencyChoices = emergencyId && EMERGENCY_CHOICE_LABELS[emergencyId]
     ? [[emergencyId, ...EMERGENCY_CHOICE_LABELS[emergencyId]]]
+    : [];
+  const finalBonusChoices = phaseId === "recovery"
+    ? finalBonusChoiceRules
+        .filter((rule) => rule.when(family))
+        .sort((a, b) => (family[b.metric] || 0) - (family[a.metric] || 0))
+        .slice(0, 2)
+        .map(({ id, title, detail }) => [id, title, detail])
     : [];
   const choices = extremeChoiceRules
     .filter((rule) => rule.when(family))
@@ -318,21 +386,23 @@ function getExtremeChoices(family, phaseId) {
       ["take_desperate_work", "Take desperate day work", "Job loss: gain food and cash, risk health and stability."]
     );
   }
-  return [...emergencyChoices, ...choices].slice(0, 4);
+  return [...emergencyChoices, ...finalBonusChoices, ...choices].slice(0, 4);
 }
 
 function familyImageFor(family) {
   if (!family) return "family-profile.png";
-  const currentDangerValues = [
-    family.food,
-    family.health,
-    family.hope,
-    family.education,
-    family.stability,
-    family.savings,
-  ].filter((value) => typeof value === "number");
-  if ((family.health ?? 100) < 25) return "family-health-crisis.png";
-  if (currentDangerValues.some((value) => value < 25)) return "family-danger-state.png";
+  const dangerMetric = [
+    ["food", family.food ?? 100, 25],
+    ["health", family.health ?? 100, 25],
+    ["savings", family.savings ?? 100, 25],
+    ["hope", family.hope ?? 100, 25],
+    ["education", family.education ?? 100, 25],
+    ["stability", family.stability ?? 100, 25],
+    ["debt", 100 - (family.debt ?? 0), 15],
+  ]
+    .filter(([, value, dangerLine]) => value < dangerLine)
+    .sort((a, b) => a[1] / a[2] - b[1] / b[2])[0]?.[0];
+  if (dangerMetric) return DANGER_PORTRAITS[dangerMetric] || "family-danger-state.png";
   return FAMILY_PORTRAITS[family.name] || "family-profile.png";
 }
 
@@ -394,6 +464,7 @@ function countChoices(family, choiceSet) {
 
 function choiceTone(choiceId) {
   if (choiceId.startsWith("emergency_")) return "emergency";
+  if (choiceId.startsWith("final_")) return "bonus";
   if (choiceId === "contribute_community_pot" || COOPERATIVE_CHOICES.has(choiceId)) return "cooperate";
   if (BETRAYAL_CHOICES.has(choiceId)) return "betray";
   return "neutral";
@@ -607,6 +678,7 @@ function App() {
   const [lastSyncedAt, setLastSyncedAt] = useState(savedGame.lastSyncedAt || 0);
   const [phaseRevealVisible, setPhaseRevealVisible] = useState(false);
   const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState([]);
+  const [leaderboardVisible, setLeaderboardVisible] = useState(false);
   const viewRef = useRef(savedGame.view || "start");
   const joinClientIdRef = useRef(savedGame.joinClientId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
@@ -922,6 +994,14 @@ function App() {
       {activePrivateNotice && !phaseRevealVisible && (
         <PrivateNoticeModal notice={activePrivateNotice} onDismiss={dismissPrivateNotice} />
       )}
+      {leaderboardVisible && (
+        <LeaderboardModal
+          players={scoredPlayers}
+          shared={shared}
+          scenario={scenario}
+          onClose={() => setLeaderboardVisible(false)}
+        />
+      )}
 
       {view === "start" && (
         <section className="gd-start">
@@ -999,25 +1079,19 @@ function App() {
               />
             ) : (
               <>
-                {!isRecoveryPhase && (
-                  <>
-                    <div className="gd-market">
-                      <p className="gd-kicker">Market Conditions - {phase.years}</p>
-                      <img src={asset(phase.image)} alt={phase.title} />
-                      <p>{phase.summary}</p>
-                    </div>
+                <div className="gd-market">
+                  <p className="gd-kicker">Market Conditions - {phase.years}</p>
+                  <img src={asset(phase.image)} alt={phase.title} />
+                  <p>{phase.summary}</p>
+                </div>
 
-                    <div className="gd-news">
-                      <p className="gd-kicker">Public News</p>
-                      {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
-                    </div>
-                  </>
-                )}
+                <div className="gd-news">
+                  <p className="gd-kicker">Public News</p>
+                  {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
+                </div>
 
                 {activePlayer?.gameOver ? (
                   <FamilyGameOver family={activePlayer} />
-                ) : isRecoveryPhase ? (
-                  <RecoveryInterlude phase={phase} view={view} isBusy={isBusy} onAdvance={advancePhase} />
                 ) : activeChoices.length > 0 && submittedChoices.length > 0 ? (
                   <div className="gd-panel gd-submitted">
                     <p className="gd-kicker">Choices Submitted</p>
@@ -1081,7 +1155,7 @@ function App() {
                 <p className="gd-sync">Sync {lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString() : "waiting"}</p>
                 <button onClick={addDemoPlayer} disabled={isBusy || players.length >= MAX_PLAYERS}>Add demo player</button>
                 <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>{isRecoveryPhase ? "Show results" : "Advance phase"}</button>
-                <button onClick={() => setView("host")}>Show leaderboard</button>
+                <button onClick={() => setLeaderboardVisible(true)}>Show leaderboard</button>
               </div>
             )}
           </aside>}
@@ -1089,6 +1163,24 @@ function App() {
         </>
       )}
     </main>
+  );
+}
+
+function LeaderboardModal({ players, shared, scenario, onClose }) {
+  return (
+    <div className="private-notice-backdrop leaderboard-backdrop" role="presentation">
+      <section className="leaderboard-modal" role="dialog" aria-modal="true" aria-labelledby="leaderboard-modal-title">
+        <button className="modal-close" type="button" onClick={onClose} aria-label="Close leaderboard">×</button>
+        <Leaderboard
+          players={players}
+          shared={shared}
+          scenario={scenario}
+          title="Current Leaderboard"
+          showAwards={false}
+          showDebrief={false}
+        />
+      </section>
+    </div>
   );
 }
 
@@ -1363,14 +1455,6 @@ function CommunityPanel({ shared, playerCount = 0 }) {
         </div>
       </div>
       <div className="community-stats">
-        <div>
-          <span>Work slots</span>
-          <strong>{current.workSlots}</strong>
-        </div>
-        <div>
-          <span>Relief slots</span>
-          <strong>{current.reliefSlots}</strong>
-        </div>
         <div className={potStatus}>
           <span>Community pot</span>
           <strong>{current.communityPot}/{current.communityNeed}</strong>
@@ -1442,14 +1526,14 @@ function PolicyPanel({ shared }) {
   );
 }
 
-function Leaderboard({ players, shared, scenario, rematchScenario }) {
+function Leaderboard({ players, shared, scenario, rematchScenario, title = "Final Leaderboard", showAwards = true, showDebrief = true }) {
   const awards = computeAwards(players, scenario);
   const debrief = historicalDebrief(players, shared);
   return (
     <div className="gd-panel leaderboard">
-      <p className="gd-kicker">Final Leaderboard</p>
+      <p className="gd-kicker">{title}</p>
       <h2>Scores include danger penalties</h2>
-      {awards[0] && (
+      {showAwards && awards[0] && (
         <div className="winner-badge">
           <img src={asset("award-most-resilient-family.png")} alt="Most Resilient Family badge" />
           <div>
@@ -1463,7 +1547,7 @@ function Leaderboard({ players, shared, scenario, rematchScenario }) {
         <LeaderboardRow player={player} index={index} key={player.id} />
       ))}
       <p className="gd-note">Scores include danger penalties, debt, trust reputation, exploit markers, rushed decisions, repeated-pattern penalties, community memory, and family objectives.</p>
-      <div className="award-grid">
+      {showAwards && <div className="award-grid">
         {awards.map((award) => (
           <div className={award.primary ? "award-card primary" : "award-card"} key={award.id}>
             <span>{award.primary ? "★" : "•"}</span>
@@ -1474,7 +1558,7 @@ function Leaderboard({ players, shared, scenario, rematchScenario }) {
             </div>
           </div>
         ))}
-      </div>
+      </div>}
       {rematchScenario && (
         <div className="rematch-panel">
           <p className="gd-kicker">Next Table Challenge</p>
@@ -1483,13 +1567,13 @@ function Leaderboard({ players, shared, scenario, rematchScenario }) {
           <small>{rematchScenario.rematchPrompt}</small>
         </div>
       )}
-      <div className="debrief-panel">
+      {showDebrief && <div className="debrief-panel">
         <p className="gd-kicker">Historical Debrief</p>
         <h3>What this room experienced</h3>
         {debrief.map((takeaway) => (
           <p key={takeaway}>{takeaway}</p>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }
