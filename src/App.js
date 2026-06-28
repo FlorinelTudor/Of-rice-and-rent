@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 const asset = (name) => `${process.env.PUBLIC_URL || ""}/depression-game/${name}`;
 const MAX_PLAYERS = 8;
 const GAME_STATE_VERSION = "blob-multiplayer-v2";
-const COOPERATIVE_CHOICES = new Set(["join_mutual_aid", "organize_neighbors", "support_union", "sponsor_neighbor", "contribute_community_pot"]);
+const COOPERATIVE_CHOICES = new Set(["join_mutual_aid", "organize_neighbors", "support_union", "sponsor_neighbor", "contribute_community_pot", "shopkeeper_extend_credit"]);
 const BETRAYAL_CHOICES = new Set(["hoard_relief", "undercut_wages", "inform_on_black_market"]);
 const EMERGENCY_CHOICE_LABELS = {
   emergency_health: ["Emergency clinic visit", "Danger: treat health now or the family may receive a closing screen next phase."],
@@ -12,11 +12,11 @@ const EMERGENCY_CHOICE_LABELS = {
   emergency_hope: ["Emergency family reset", "Danger: rebuild hope now or the family may receive a closing screen next phase."],
   emergency_debt: ["Emergency debt settlement", "Danger: settle debt now or the family may receive a closing screen next phase."],
 };
-const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market"]);
-const WORK_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "final_education_training", "final_health_shift", "undercut_wages"]);
-const WORK_OR_RELIEF_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "accept_relief", "seek_charity_clinic", "hoard_relief"]);
-const MOBILITY_CHOICES = new Set(["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"]);
-const SKILL_CHOICES = new Set(["night_school", "fund_training"]);
+const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market", "railroad_follow_work", "miner_company_store", "seasonal_follow_harvest"]);
+const WORK_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "final_education_training", "final_health_shift", "undercut_wages", "factory_overtime", "railroad_follow_work", "garment_piecework_home", "service_laundry_clients", "seasonal_follow_harvest"]);
+const WORK_OR_RELIEF_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "accept_relief", "seek_charity_clinic", "hoard_relief", "factory_overtime", "railroad_follow_work", "garment_piecework_home", "service_laundry_clients", "miner_company_store", "seasonal_follow_harvest"]);
+const MOBILITY_CHOICES = new Set(["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work", "railroad_follow_work", "seasonal_follow_harvest"]);
+const SKILL_CHOICES = new Set(["night_school", "fund_training", "immigrant_english_classes"]);
 const FAMILY_PORTRAITS = {
   Carter: "family-carter-factory.png",
   Rosen: "family-rosen-shopkeepers.png",
@@ -37,6 +37,78 @@ const DANGER_PORTRAITS = {
   stability: "family-stability-crisis.png",
   debt: "family-savings-crisis.png",
 };
+const ACTION_CARD_ART = {
+  factory_overtime: "action-factory-overtime.png",
+  shopkeeper_extend_credit: "action-shopkeeper-extend-credit.png",
+  tenant_sell_crop_early: "action-tenant-sell-crop-early.png",
+  immigrant_english_classes: "action-immigrant-english-classes.png",
+  railroad_follow_work: "action-railroad-follow-work.png",
+  garment_piecework_home: "action-garment-piecework-home.png",
+  service_laundry_clients: "action-service-laundry-clients.png",
+  miner_company_store: "action-miner-company-store.png",
+  seasonal_follow_harvest: "action-seasonal-follow-harvest.png",
+  invest_stocks: "action-invest-stocks.png",
+  undercut_wages: "action-undercut-wages.png",
+  hoard_relief: "action-hoard-relief.png",
+  contribute_community_pot: "action-contribute-community-pot.png",
+  search_any_work: "action-search-any-work.png",
+  apply_public_works: "action-apply-public-works.png",
+  take_store_credit: "action-take-store-credit.png",
+  pay_down_debt: "action-pay-down-debt.png",
+  join_mutual_aid: "action-join-mutual-aid.png",
+  move_for_work_camp: "action-move-for-work-camp.png",
+  emergency_food: "action-emergency-food.png",
+  keep_children_school: "action-keep-children-school.png",
+  use_savings_food: "action-use-savings-food.png",
+};
+const ACTION_CARD_IMPACTS = {
+  factory_overtime: { savings: 15, health: -8, stability: 5 },
+  shopkeeper_extend_credit: { reputation: 13, hope: 7, savings: -12 },
+  tenant_sell_crop_early: { savings: 16, food: -10, hope: -4 },
+  immigrant_english_classes: { education: 15, reputation: 7, savings: -8 },
+  railroad_follow_work: { savings: 14, stability: -9, health: -4 },
+  garment_piecework_home: { savings: 12, education: -7, hope: -5 },
+  service_laundry_clients: { savings: 12, reputation: 9, health: -6 },
+  miner_company_store: { food: 13, debt: 13, hope: -5 },
+  seasonal_follow_harvest: { food: 12, savings: 11, stability: -11 },
+  invest_stocks: { savings: 22, stock: 26, hope: 10, stability: -4 },
+  undercut_wages: { savings: 19, stability: -12, hope: -8, reputation: -12 },
+  hoard_relief: { food: 18, savings: 8, hope: -5, reputation: -14 },
+  contribute_community_pot: { food: -8, savings: -5, hope: 6, stability: 7, reputation: 10 },
+  search_any_work: { savings: 12, health: -8, hope: 5 },
+  apply_public_works: { food: 15, savings: 13, health: -5, hope: 16 },
+  take_store_credit: { food: 8, debt: 17, hope: 5 },
+  pay_down_debt: { debt: -24, savings: -9, stability: 10 },
+  join_mutual_aid: { hope: 12, stability: 11, savings: -5 },
+  move_for_work_camp: { savings: 14, education: 7, hope: -10 },
+  emergency_food: { food: 38, hope: -6, reputation: -8 },
+  keep_children_school: { education: 18, savings: -13, hope: 6 },
+  use_savings_food: { food: 18, health: 9, savings: -17 },
+};
+const ACTION_METRIC_LABELS = {
+  bankTrust: "Bank trust",
+  debt: "Debt",
+  education: "Education",
+  food: "Food",
+  health: "Health",
+  hope: "Hope",
+  reputation: "Trust",
+  savings: "Savings",
+  stability: "Stability",
+  stock: "Stock",
+};
+const BACKGROUND_ACTIONS = {
+  Carter: ["factory_overtime", "Take extra factory shift", "Factory household: more pay, more strain."],
+  Rosen: ["shopkeeper_extend_credit", "Extend customer credit", "Shopkeepers: earn loyalty, tie up cash."],
+  Williams: ["tenant_sell_crop_early", "Sell crop early", "Tenant farmers: cash now, less food security."],
+  Novak: ["immigrant_english_classes", "Attend English night class", "New arrivals: build standing and skills, lose income time."],
+  "O'Connor": ["railroad_follow_work", "Follow rail work", "Rail family: chase pay along the line, unsettle home."],
+  Bianchi: ["garment_piecework_home", "Take garment piecework home", "Garment workers: extra income, schooling and morale suffer."],
+  Johnson: ["service_laundry_clients", "Take laundry clients", "Service workers: side income and reputation, exhausting hours."],
+  Kowalski: ["miner_company_store", "Use company store credit", "Mining household: food now, company debt later."],
+  Martinez: ["seasonal_follow_harvest", "Follow the harvest", "Seasonal laborers: food and wages, fragile stability."],
+};
+const BACKGROUND_ACTION_PHASES = new Set(["postwar", "recession_1921", "crash", "deepening", "bank_holiday", "work_relief", "second", "defense_shift", "recovery"]);
 const SCENARIO_OPTIONS = [
   {
     id: "easy_credit",
@@ -390,6 +462,29 @@ function getExtremeChoices(family, phaseId) {
   return [...emergencyChoices, ...finalBonusChoices, ...choices].slice(0, 4);
 }
 
+function backgroundChoiceFor(family) {
+  return family ? BACKGROUND_ACTIONS[family.name] : null;
+}
+
+function choicesForFamily(phaseChoices, family, phaseId) {
+  const backgroundChoice = backgroundChoiceFor(family);
+  if (!backgroundChoice || !BACKGROUND_ACTION_PHASES.has(phaseId)) return phaseChoices;
+  const [backgroundId] = backgroundChoice;
+  let didUseBackground = false;
+  const contextualChoices = phaseChoices.map((choice) => {
+    if (choice[0] !== "move_to_city") return choice;
+    didUseBackground = true;
+    return backgroundChoice;
+  });
+  if (didUseBackground || contextualChoices.some(([id]) => id === backgroundId)) return contextualChoices;
+  const insertAt = Math.min(2, contextualChoices.length);
+  return [
+    ...contextualChoices.slice(0, insertAt),
+    backgroundChoice,
+    ...contextualChoices.slice(insertAt),
+  ];
+}
+
 function familyImageFor(family) {
   if (!family) return "family-profile.png";
   const dangerMetric = [
@@ -491,6 +586,20 @@ function choiceTone(choiceId) {
   if (choiceId === "contribute_community_pot" || COOPERATIVE_CHOICES.has(choiceId)) return "cooperate";
   if (BETRAYAL_CHOICES.has(choiceId)) return "betray";
   return "neutral";
+}
+
+function choiceImpactChips(choiceId) {
+  const impact = ACTION_CARD_IMPACTS[choiceId];
+  if (!impact) return [];
+  return Object.entries(impact).map(([key, value]) => {
+    const isBenefit = key === "debt" ? value < 0 : value > 0;
+    const sign = value > 0 ? "+" : "-";
+    return {
+      key,
+      tone: isBenefit ? "buff" : "debuff",
+      label: `${sign} ${ACTION_METRIC_LABELS[key] || key}`,
+    };
+  });
 }
 
 function objectiveResult(family) {
@@ -717,9 +826,10 @@ function App() {
   const activeChoices = useMemo(() => {
     if (activePlayer?.gameOver) return [];
     if (!phase.choices.length) return phase.choices;
-    const existingChoiceIds = new Set(phase.choices.map(([id]) => id));
+    const baseChoices = choicesForFamily(phase.choices, activePlayer, phase.id);
+    const existingChoiceIds = new Set(baseChoices.map(([id]) => id));
     const extremeChoices = getExtremeChoices(activePlayer, phase.id).filter(([id]) => !existingChoiceIds.has(id));
-    return [...phase.choices, ...extremeChoices];
+    return [...baseChoices, ...extremeChoices];
   }, [activePlayer, phase]);
   const scoredPlayers = useMemo(
     () => players.map((p) => ({ ...p, score: scoreFamily(p) })).sort((a, b) => b.score - a.score),
@@ -1144,6 +1254,8 @@ function App() {
                       <div className="gd-choice-grid">
                         {activeChoices.map(([id, title, detail], index) => {
                           const blockedByWorkRule = !selected.includes(id) && WORK_CHOICES.has(id) && selected.some((item) => WORK_CHOICES.has(item));
+                          const cardArt = ACTION_CARD_ART[id];
+                          const chips = choiceImpactChips(id);
                           return (
                             <button
                               key={id}
@@ -1156,8 +1268,16 @@ function App() {
                               disabled={blockedByWorkRule}
                               title={blockedByWorkRule ? "Choose only one work action this round." : undefined}
                             >
+                              {cardArt && <img className="choice-card-art" src={asset(cardArt)} alt="" />}
                               <span>{String.fromCharCode(65 + index)}</span>
                               <strong>{title}</strong>
+                              {!!chips.length && (
+                                <div className="choice-effects" aria-label="Action effects">
+                                  {chips.map((chip) => (
+                                    <b className={`effect-chip ${chip.tone}`} key={`${id}-${chip.key}`}>{chip.label}</b>
+                                  ))}
+                                </div>
+                              )}
                               <em>{blockedByWorkRule ? "Choose only one work action this round." : detail}</em>
                             </button>
                           );

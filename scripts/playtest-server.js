@@ -198,6 +198,15 @@ const OBJECTIVE_VARIANTS = {
 };
 
 const IMPACTS = {
+  factory_overtime: { savings: 15, health: -8, stability: 5 },
+  shopkeeper_extend_credit: { reputation: 13, hope: 7, savings: -12 },
+  tenant_sell_crop_early: { savings: 16, food: -10, hope: -4 },
+  immigrant_english_classes: { education: 15, reputation: 7, savings: -8 },
+  railroad_follow_work: { savings: 14, stability: -9, health: -4 },
+  garment_piecework_home: { savings: 12, education: -7, hope: -5 },
+  service_laundry_clients: { savings: 12, reputation: 9, health: -6 },
+  miner_company_store: { food: 13, debt: 13, hope: -5 },
+  seasonal_follow_harvest: { food: 12, savings: 11, stability: -11 },
   keep_factory_job: { food: 6, savings: 9, hope: -5, stability: 16 },
   use_savings_food: { food: 18, health: 9, savings: -17 },
   move_to_city: { savings: -10, hope: 7, stability: -9 },
@@ -254,6 +263,15 @@ const IMPACTS = {
 };
 
 const ACTION_DYNAMICS = {
+  factory_overtime: ["work"],
+  shopkeeper_extend_credit: ["cooperate"],
+  tenant_sell_crop_early: ["household"],
+  immigrant_english_classes: ["skills"],
+  railroad_follow_work: ["work", "mobility"],
+  garment_piecework_home: ["work"],
+  service_laundry_clients: ["work"],
+  miner_company_store: ["relief"],
+  seasonal_follow_harvest: ["work", "mobility"],
   keep_factory_job: ["work"],
   search_any_work: ["work"],
   apply_public_works: ["work", "relief"],
@@ -283,12 +301,12 @@ function choicePattern(choice) {
   if (["take_store_credit", "buy_radio_credit", "borrow_to_invest"].includes(choice)) return "credit";
   if (["invest_stocks", "sell_stocks_now", "withdraw_bank_cash"].includes(choice)) return "speculation";
   if (["cut_food_rent", "sell_possessions", "pawn_heirloom", "delay_medical_care"].includes(choice)) return "austerity";
-  if (["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"].includes(choice)) return "mobility";
+  if (["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"].includes(choice) || ACTION_DYNAMICS[choice]?.includes("mobility")) return "mobility";
   if (ACTION_DYNAMICS[choice]?.includes("betray")) return "betrayal";
   if (ACTION_DYNAMICS[choice]?.includes("cooperate")) return "community";
   if (ACTION_DYNAMICS[choice]?.includes("relief")) return "relief";
   if (ACTION_DYNAMICS[choice]?.includes("work")) return "work";
-  if (["night_school", "fund_training", "keep_children_school"].includes(choice)) return "skills";
+  if (["night_school", "fund_training", "keep_children_school"].includes(choice) || ACTION_DYNAMICS[choice]?.includes("skills")) return "skills";
   return "household";
 }
 

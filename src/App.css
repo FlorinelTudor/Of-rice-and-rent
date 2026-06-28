@@ -338,6 +338,12 @@
   padding: 16px;
 }
 
+.gd-news {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .gd-market img,
 .gd-news img,
 .family-image img {
@@ -355,7 +361,8 @@
 .gd-news img {
   max-height: 390px;
   object-fit: contain;
-  background: #efe7d9;
+  border-radius: 0;
+  background: transparent;
 }
 
 .gd-news h2 {
@@ -620,13 +627,15 @@
 .gd-choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 12px;
 }
 
 .gd-choice-grid button {
+  align-self: start;
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto auto;
   gap: 3px 10px;
   align-items: start;
   min-height: 132px;
@@ -636,10 +645,21 @@
   background: rgba(255, 255, 255, .9);
   color: var(--gd-ink);
   text-align: left;
+  overflow: hidden;
+}
+
+.choice-card-art {
+  grid-column: 1 / -1;
+  width: calc(100% + 28px);
+  height: auto;
+  aspect-ratio: 4 / 3;
+  margin: -14px -14px 9px;
+  object-fit: cover;
+  border-bottom: 1px solid rgba(29, 27, 24, .16);
 }
 
 .gd-choice-grid button span {
-  grid-row: 1 / 3;
+  grid-row: span 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -657,15 +677,51 @@
 }
 
 .gd-choice-grid button em {
+  grid-column: 2;
   color: var(--gd-muted);
   font-style: normal;
   font-weight: 500;
+}
+
+.choice-effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 3px 0 2px;
+}
+
+.effect-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.effect-chip.buff {
+  background: #dff3e2;
+  color: #1f6844;
+}
+
+.effect-chip.debuff {
+  background: #f4d7d2;
+  color: #8e2f26;
 }
 
 .gd-choice-grid button.selected {
   border-color: #111111;
   background: #fff8df;
   box-shadow: inset 0 0 0 2px #111111;
+}
+
+.gd-choice-grid button.choice-disabled {
+  opacity: .62;
+  cursor: not-allowed;
 }
 
 .gd-choice-grid button.choice-cooperate {
