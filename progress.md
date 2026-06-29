@@ -26,3 +26,4 @@ Original prompt: Build a 10-25 minute multiplayer learning game where colleagues
 - Started the action-card visual system with imagegen art for the first core action set, plus dynamic green/red buff/debuff chips driven by action impacts. First rollout includes the requested 12 cards plus the early "Use savings for food" tradeoff card.
 - Replaced the first action-card art set with object-and-setting compositions instead of family portraits, so action cards read separately from family condition portraits.
 - Added background-specific action cards for each family background, including UI injection, meter impacts, work/relief/cooperation tagging, and matching object-based card art.
+- Generated and wired object-based visuals for every playable action choice in the game, including shared phase choices, emergency choices, final bonus choices, and background-specific cards.
