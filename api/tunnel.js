@@ -1,4 +1,4 @@
-const TUNNEL_ORIGIN = "https://scan-joyce-style-pregnant.trycloudflare.com";
+const TUNNEL_ORIGIN = "https://describe-accessed-farming-useful.trycloudflare.com";
 
 function normalizePath(value) {
   if (Array.isArray(value)) return value.join("/");
