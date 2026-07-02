@@ -1,5 +1,5 @@
 import "@/App.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Component, useEffect, useMemo, useRef, useState } from "react";
 
 const asset = (name) => `${process.env.PUBLIC_URL || ""}/depression-game/${name}`;
 const MAX_PLAYERS = 8;
@@ -898,6 +898,42 @@ async function gameApi(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.detail || data.error || "The game room server did not respond.");
   return data;
+}
+
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  resetSavedState = () => {
+    window.localStorage.removeItem("gd-game-state");
+    window.location.reload();
+  };
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <main className="gd-app">
+        <section className="gd-panel gd-crash-panel">
+          <p className="gd-kicker">Room Recovery</p>
+          <h1>The table hit a bad browser state</h1>
+          <p>
+            The room server is still running. Refresh first; if this browser keeps showing this screen,
+            reset its saved game state and rejoin with the room code.
+          </p>
+          <div className="gd-actions">
+            <button onClick={() => window.location.reload()}>Refresh</button>
+            <button className="secondary" onClick={this.resetSavedState}>Reset this browser</button>
+          </div>
+        </section>
+      </main>
+    );
+  }
 }
 
 function App() {
@@ -1950,4 +1986,12 @@ function LeaderboardRow({ player, index }) {
   );
 }
 
-export default App;
+function RootApp() {
+  return (
+    <AppErrorBoundary>
+      <App />
+    </AppErrorBoundary>
+  );
+}
+
+export default RootApp;
