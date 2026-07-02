@@ -105,6 +105,59 @@ async function assertScenarioSelection(baseUrl) {
   }
 }
 
+async function assertHardModeNemesis(baseUrl) {
+  const created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({ scenario_id: "bank_panic", hard_mode: true }) });
+  const roomCode = created.room.roomCode;
+  const hostToken = created.hostToken;
+  if (!created.room.scenario?.hardMode) throw new Error("Expected Hard Mode room to expose hardMode=true.");
+  const stamp = Date.now();
+  await request(baseUrl, `/rooms/${roomCode}/join`, {
+    method: "POST",
+    body: JSON.stringify({ player_name: "Nemesis One", client_id: `nemesis-one-${stamp}` }),
+  });
+  await request(baseUrl, `/rooms/${roomCode}/join`, {
+    method: "POST",
+    body: JSON.stringify({ player_name: "Nemesis Two", client_id: `nemesis-two-${stamp}` }),
+  });
+  for (let i = 0; i < 3; i += 1) {
+    await request(baseUrl, `/rooms/${roomCode}/advance`, {
+      method: "POST",
+      body: JSON.stringify({ host_token: hostToken }),
+    });
+  }
+  let state = await request(baseUrl, `/rooms/${roomCode}`);
+  if (state.room.phaseIndex !== 3) throw new Error(`Expected speculation rival window, got phase ${state.room.phaseIndex}.`);
+  const attacker = state.room.players[0];
+  const target = state.room.players[1];
+  state = await request(baseUrl, `/rooms/${roomCode}/rival`, {
+    method: "POST",
+    body: JSON.stringify({ player_id: attacker.id, rival_id: target.id }),
+  });
+  const updatedAttacker = state.room.players.find((player) => player.id === attacker.id);
+  if (updatedAttacker.rivalId !== target.id || updatedAttacker.rivalTokensRemaining !== 1) {
+    throw new Error("Expected rival nomination to save the target and spend one token.");
+  }
+  await Promise.all([
+    request(baseUrl, `/rooms/${roomCode}/choices`, {
+      method: "POST",
+      body: JSON.stringify({ player_id: attacker.id, choices: ["invest_stocks", "rival_call_in_debt"] }),
+    }),
+    request(baseUrl, `/rooms/${roomCode}/choices`, {
+      method: "POST",
+      body: JSON.stringify({ player_id: target.id, choices: ["invest_stocks", "contribute_community_pot"] }),
+    }),
+  ]);
+  state = await request(baseUrl, `/rooms/${roomCode}`);
+  const attackedTarget = state.room.players.find((player) => player.id === target.id);
+  const attackingPlayer = state.room.players.find((player) => player.id === attacker.id);
+  if (attackedTarget.rivalHit?.phaseId !== "speculation") {
+    throw new Error("Expected sabotage to create a rival-hit notice on the target.");
+  }
+  if ((attackingPlayer.sabotageHistory || []).length !== 1) {
+    throw new Error("Expected attacker sabotage history to record the rival action.");
+  }
+}
+
 async function assertEmergencyCollapse(baseUrl) {
   let created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({ test_family_overrides: { health: 0 } }) });
   let roomCode = created.room.roomCode;
@@ -180,6 +233,7 @@ async function assertRematchJoinLink(baseUrl) {
 async function main() {
   const baseUrl = getBaseUrl();
   await assertScenarioSelection(baseUrl);
+  await assertHardModeNemesis(baseUrl);
   await assertEmergencyCollapse(baseUrl);
   await assertRematchJoinLink(baseUrl);
   await assertHardBetrayal(baseUrl);

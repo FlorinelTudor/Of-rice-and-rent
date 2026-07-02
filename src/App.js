@@ -5,14 +5,16 @@ const asset = (name) => `${process.env.PUBLIC_URL || ""}/depression-game/${name}
 const MAX_PLAYERS = 8;
 const GAME_STATE_VERSION = "blob-multiplayer-v2";
 const COOPERATIVE_CHOICES = new Set(["join_mutual_aid", "organize_neighbors", "support_union", "sponsor_neighbor", "contribute_community_pot", "shopkeeper_extend_credit"]);
-const BETRAYAL_CHOICES = new Set(["hoard_relief", "undercut_wages", "inform_on_black_market"]);
+const SABOTAGE_CHOICE_IDS = ["rival_undercut_work", "rival_spread_bank_rumors", "rival_call_in_debt", "rival_block_relief"];
+const BETRAYAL_CHOICES = new Set(["hoard_relief", "undercut_wages", "inform_on_black_market", ...SABOTAGE_CHOICE_IDS]);
+const RIVAL_WINDOW_PHASES = new Set(["speculation", "deepening"]);
 const EMERGENCY_CHOICE_LABELS = {
   emergency_health: ["Emergency clinic visit", "Danger: treat health now or the family may receive a closing screen next phase."],
   emergency_food: ["Emergency food line", "Danger: secure food now or the family may receive a closing screen next phase."],
   emergency_hope: ["Emergency family reset", "Danger: rebuild hope now or the family may receive a closing screen next phase."],
   emergency_debt: ["Emergency debt settlement", "Danger: settle debt now or the family may receive a closing screen next phase."],
 };
-const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market", "railroad_follow_work", "miner_company_store", "seasonal_follow_harvest"]);
+const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market", "railroad_follow_work", "miner_company_store", "seasonal_follow_harvest", ...SABOTAGE_CHOICE_IDS]);
 const WORK_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "final_education_training", "final_health_shift", "undercut_wages", "factory_overtime", "railroad_follow_work", "garment_piecework_home", "service_laundry_clients", "seasonal_follow_harvest"]);
 const WORK_OR_RELIEF_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "accept_relief", "seek_charity_clinic", "hoard_relief", "factory_overtime", "railroad_follow_work", "garment_piecework_home", "service_laundry_clients", "miner_company_store", "seasonal_follow_harvest"]);
 const MOBILITY_CHOICES = new Set(["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work", "railroad_follow_work", "seasonal_follow_harvest"]);
@@ -100,6 +102,10 @@ const ACTION_CARD_ART = {
   emergency_food: "action-emergency-food.png",
   keep_children_school: "action-keep-children-school.png",
   use_savings_food: "action-use-savings-food.png",
+  rival_undercut_work: "action-rival-undercut-work.png",
+  rival_spread_bank_rumors: "action-rival-spread-bank-rumors.png",
+  rival_call_in_debt: "action-rival-call-in-debt.png",
+  rival_block_relief: "action-rival-block-relief.png",
 };
 const ACTION_CARD_IMPACTS = {
   factory_overtime: { savings: 15, health: -8, stability: 5 },
@@ -164,6 +170,10 @@ const ACTION_CARD_IMPACTS = {
   emergency_food: { food: 38, hope: -6, reputation: -8 },
   keep_children_school: { education: 18, savings: -13, hope: 6 },
   use_savings_food: { food: 18, health: 9, savings: -17 },
+  rival_undercut_work: { savings: 8, reputation: -14, hope: -4 },
+  rival_spread_bank_rumors: { bankTrust: 6, reputation: -12, hope: -5 },
+  rival_call_in_debt: { savings: 10, reputation: -16, stability: -4 },
+  rival_block_relief: { food: 8, reputation: -18, hope: -5 },
 };
 const ACTION_METRIC_LABELS = {
   bankTrust: "Bank trust",
@@ -189,6 +199,12 @@ const BACKGROUND_ACTIONS = {
   Martinez: ["seasonal_follow_harvest", "Follow the harvest", "Seasonal laborers: food and wages, fragile stability."],
 };
 const BACKGROUND_ACTION_PHASES = new Set(["postwar", "recession_1921", "crash", "deepening", "bank_holiday", "work_relief", "second", "defense_shift", "recovery"]);
+const SABOTAGE_CHOICES = [
+  ["rival_undercut_work", "Undercut rival wages", "Hard Mode: compete for scarce work. Your rival loses work momentum if the board turns against them."],
+  ["rival_spread_bank_rumors", "Spread bank rumors", "Hard Mode: shake confidence around your rival's savings and bank trust."],
+  ["rival_call_in_debt", "Call in a private debt", "Hard Mode: squeeze your rival's cash cushion, but your trust takes a hit."],
+  ["rival_block_relief", "Block relief access", "Hard Mode: use reputation pressure to make relief harder for your rival."],
+];
 const SCENARIO_OPTIONS = [
   {
     id: "easy_credit",
@@ -542,6 +558,12 @@ function getExtremeChoices(family, phaseId) {
   return [...emergencyChoices, ...finalBonusChoices, ...choices].slice(0, 4);
 }
 
+function getSabotageChoices(family, phaseId, scenario) {
+  if (!scenario?.hardMode || phaseId === "results" || phaseId === "postwar") return [];
+  if (!family?.rivalId || family?.gameOver) return [];
+  return SABOTAGE_CHOICES;
+}
+
 function backgroundChoiceFor(family) {
   return family ? BACKGROUND_ACTIONS[family.name] : null;
 }
@@ -591,6 +613,7 @@ function scoreFamily(family) {
   const debtPenalty = family.debt * 0.28;
   const reputationBonus = ((family.reputation ?? 50) - 50) * 0.22;
   const exploitPenalty = (family.exploitMarkers || 0) * 5;
+  const sabotagePenalty = (family.sabotageHistory || []).length * 2;
   const gameOverPenalty = family.gameOver ? 25 : 0;
   const rushedPenalty = (family.rushedChoiceCount || 0) * 2;
   const patternPenalty = family.patternPenalty || 0;
@@ -602,6 +625,7 @@ function scoreFamily(family) {
       debtPenalty -
       dangerPenalty -
       exploitPenalty -
+      sabotagePenalty -
       gameOverPenalty -
       rushedPenalty -
       patternPenalty -
@@ -629,6 +653,8 @@ function scoreNotes(family) {
   if ((family.patternPenalty || 0) > 0) notes.push(`${family.patternPenalty} predictable play`);
   if ((family.communityMemoryHits || 0) > 0) notes.push(`${family.communityMemoryHits} trust exclusion`);
   if ((family.exploitMarkers || 0) > 0) notes.push(`${family.exploitMarkers} exploit markers`);
+  if ((family.sabotageHistory || []).length > 0) notes.push(`${family.sabotageHistory.length} rival attacks made`);
+  if ((family.rivalHistory || []).length > 0) notes.push(`${family.rivalHistory.length} rival nomination${family.rivalHistory.length > 1 ? "s" : ""}`);
   if (family.gameOver) notes.push("collapse penalty");
   if (objectiveResult(family).completed) notes.push("+10 objective");
   return notes;
@@ -643,6 +669,7 @@ function scoreBreakdown(family) {
   if (dangerPenalty) parts.push(`danger lows -${dangerPenalty}`);
   if (reputationBonus) parts.push(`trust ${reputationBonus > 0 ? "+" : ""}${reputationBonus}`);
   if (family.exploitMarkers) parts.push(`betrayal -${family.exploitMarkers * 5}`);
+  if (family.sabotageHistory?.length) parts.push(`rival attacks -${family.sabotageHistory.length * 2}`);
   if (family.rushedChoiceCount) parts.push(`rushed -${family.rushedChoiceCount * 2}`);
   if (family.patternPenalty) parts.push(`predictable play -${family.patternPenalty}`);
   if (family.communityMemoryHits) parts.push(`community exclusion -${family.communityMemoryHits * 3}`);
@@ -663,6 +690,7 @@ function countChoices(family, choiceSet) {
 function choiceTone(choiceId) {
   if (choiceId.startsWith("emergency_")) return "emergency";
   if (choiceId.startsWith("final_")) return "bonus";
+  if (SABOTAGE_CHOICE_IDS.includes(choiceId)) return "sabotage";
   if (choiceId === "contribute_community_pot" || COOPERATIVE_CHOICES.has(choiceId)) return "cooperate";
   if (BETRAYAL_CHOICES.has(choiceId)) return "betray";
   return "neutral";
@@ -792,12 +820,18 @@ function computeAwards(players, scenario) {
   }, usedIds);
   if (boldestGamble) usedIds.add(boldestGamble.id);
   const steadyHand = awardWinner(players, scoreMap, (player) => lowestRecordedMeter(player) - (player.exploitMarkers || 0) * 10 - (player.rushedChoiceCount || 0) * 3, usedIds);
+  const nemesis = scenario?.hardMode ? awardWinner(players, scoreMap, (player) => {
+    const attacks = (player.sabotageHistory || []).length;
+    const survivedRivals = (player.rivalHit ? 1 : 0) + (player.rivalHistory || []).length;
+    return attacks * 18 + survivedRivals * 5 + (scoreMap.get(player.id) || 0) * 0.2 - (player.exploitMarkers || 0) * 4;
+  }, usedIds) : null;
   return [
     { id: "resilient", title: "Most Resilient Family", player: mostResilient, detail: "Highest final resilience score across meters, debt, trust, and danger penalties.", primary: true },
     { id: "anchor", title: variant.anchor || "Community Anchor", player: communityAnchor, detail: variant.anchorDetail || "Best record of cooperation, trust, and low exploitation." },
     { id: "hardest", title: variant.hardest || "Hardest Road", player: hardestRoad, detail: variant.hardestDetail || "Strongest finish from the toughest family position." },
     { id: "gamble", title: variant.gamble || "Boldest Gamble", player: boldestGamble, detail: variant.gambleDetail || "Took the biggest strategic risks while staying in the race." },
     { id: "steady", title: variant.steady || "Steady Hand", player: steadyHand, detail: variant.steadyDetail || "Kept the family out of danger with the fewest severe lows." },
+    { id: "nemesis", title: "Sharpest Elbows", player: nemesis, detail: "Used rival pressure most aggressively while still staying in the race." },
   ].filter((award) => award.player);
 }
 
@@ -881,6 +915,7 @@ function App() {
   const [rematchScenario, setRematchScenario] = useState(savedGame.rematchScenario || null);
   const [nextRoomCode, setNextRoomCode] = useState(savedGame.nextRoomCode || "");
   const [selectedScenarioId, setSelectedScenarioId] = useState(savedGame.selectedScenarioId || "easy_credit");
+  const [selectedHardMode, setSelectedHardMode] = useState(Boolean(savedGame.selectedHardMode));
   const [phaseIndex, setPhaseIndex] = useState(savedGame.phaseIndex || 0);
   const [playerName, setPlayerName] = useState(savedGame.playerName || "");
   const [activePlayerId, setActivePlayerId] = useState(savedGame.activePlayerId || "");
@@ -900,6 +935,7 @@ function App() {
   const isRecoveryPhase = phase.id === "recovery";
   const previousPhaseId = phases[phaseIndex - 1]?.id;
   const activePlayer = players.find((p) => p.id === activePlayerId) || players[0];
+  const rivalPlayer = activePlayer?.rivalId ? players.find((p) => p.id === activePlayer.rivalId) : null;
   const activeRoundPlayers = players.filter((p) => !p.gameOver);
   const submittedChoices = activePlayer?.choices?.[phase.id] || [];
   const submittedCount = activeRoundPlayers.filter((p) => p.choices?.[phase.id]?.length === 2).length;
@@ -909,8 +945,10 @@ function App() {
     const baseChoices = choicesForFamily(phase.choices, activePlayer, phase.id);
     const existingChoiceIds = new Set(baseChoices.map(([id]) => id));
     const extremeChoices = getExtremeChoices(activePlayer, phase.id).filter(([id]) => !existingChoiceIds.has(id));
-    return [...baseChoices, ...extremeChoices];
-  }, [activePlayer, phase]);
+    const allExistingIds = new Set([...baseChoices, ...extremeChoices].map(([id]) => id));
+    const sabotageChoices = getSabotageChoices(activePlayer, phase.id, scenario).filter(([id]) => !allExistingIds.has(id));
+    return [...baseChoices, ...extremeChoices, ...sabotageChoices];
+  }, [activePlayer, phase, scenario]);
   const scoredPlayers = useMemo(
     () => players.map((p) => ({ ...p, score: scoreFamily(p) })).sort((a, b) => b.score - a.score),
     [players]
@@ -937,6 +975,16 @@ function App() {
         title: activePlayer.employmentShock.title,
         detail: activePlayer.employmentShock.detail,
         image: "work-relief-market.png",
+      });
+    }
+    if (activePlayer.rivalHit?.phaseId === previousPhaseId) {
+      notices.push({
+        key: `${activePlayer.id}-${activePlayer.rivalHit.phaseId}-rival-hit`,
+        type: "rival",
+        kicker: "Rival Move",
+        title: activePlayer.rivalHit.title,
+        detail: activePlayer.rivalHit.detail,
+        image: "action-rival-call-in-debt.png",
       });
     }
     const hasCurrentJobLoss = activePlayer.employmentShock?.phaseId === phase.id;
@@ -984,6 +1032,7 @@ function App() {
         rematchScenario,
         nextRoomCode,
         selectedScenarioId,
+        selectedHardMode,
         phaseIndex,
         playerName,
         activePlayerId,
@@ -992,7 +1041,7 @@ function App() {
         joinClientId: joinClientIdRef.current,
       })
     );
-  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt]);
+  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt]);
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
@@ -1078,7 +1127,7 @@ function App() {
   }, [rematchScenario?.id]);
 
   async function createHostRoom(scenarioId = selectedScenarioId) {
-    const payload = { scenario_id: scenarioId };
+    const payload = { scenario_id: scenarioId, hard_mode: selectedHardMode };
     if (isResultsPhase && roomCode && hostToken) {
       payload.previous_room_code = roomCode;
       payload.host_token = hostToken;
@@ -1091,6 +1140,7 @@ function App() {
     setSelected([]);
     setNextRoomCode("");
     setSelectedScenarioId(data.room?.scenario?.id || scenarioId);
+    setSelectedHardMode(Boolean(data.room?.scenario?.hardMode));
     setView("host");
   }
 
@@ -1161,8 +1211,21 @@ function App() {
     setSelected((current) => {
       if (current.includes(choice)) return current.filter((item) => item !== choice);
       if (WORK_CHOICES.has(choice) && current.some((item) => WORK_CHOICES.has(item))) return current;
+      if (SABOTAGE_CHOICE_IDS.includes(choice) && current.some((item) => SABOTAGE_CHOICE_IDS.includes(item))) return current;
       return current.length >= 2 ? [current[1], choice] : [...current, choice];
     });
+  }
+
+  async function chooseRival(rivalId) {
+    if (!activePlayer || !rivalId) return;
+    const data = await runGameRequest(() =>
+      gameApi(`/game/rooms/${roomCode}/rival`, {
+        method: "POST",
+        body: JSON.stringify({ player_id: activePlayer.id, rival_id: rivalId }),
+      })
+    );
+    if (!data) return;
+    syncRoom(data.room);
   }
 
   async function submitChoices() {
@@ -1235,6 +1298,8 @@ function App() {
                   <ScenarioPicker
                     selectedScenarioId={selectedScenarioId}
                     onSelect={setSelectedScenarioId}
+                    hardMode={selectedHardMode}
+                    onHardModeChange={setSelectedHardMode}
                     compact
                   />
                 )}
@@ -1331,9 +1396,20 @@ function App() {
                           <span>Select the red emergency card this phase to keep this family in the game.</span>
                         </div>
                       )}
+                      {scenario?.hardMode && activePlayer && (
+                        <RivalPanel
+                          activePlayer={activePlayer}
+                          players={players}
+                          phase={phase}
+                          rivalPlayer={rivalPlayer}
+                          isBusy={isBusy}
+                          onChooseRival={chooseRival}
+                        />
+                      )}
                       <div className="gd-choice-grid">
                         {activeChoices.map(([id, title, detail], index) => {
                           const blockedByWorkRule = !selected.includes(id) && WORK_CHOICES.has(id) && selected.some((item) => WORK_CHOICES.has(item));
+                          const blockedBySabotageRule = !selected.includes(id) && SABOTAGE_CHOICE_IDS.includes(id) && selected.some((item) => SABOTAGE_CHOICE_IDS.includes(item));
                           const cardArt = ACTION_CARD_ART[id];
                           const chips = choiceImpactChips(id);
                           return (
@@ -1341,12 +1417,12 @@ function App() {
                               key={id}
                               className={[
                                 selected.includes(id) ? "selected" : "",
-                                blockedByWorkRule ? "choice-disabled" : "",
+                                blockedByWorkRule || blockedBySabotageRule ? "choice-disabled" : "",
                                 `choice-${choiceTone(id)}`,
                               ].filter(Boolean).join(" ")}
                               onClick={() => toggleChoice(id)}
-                              disabled={blockedByWorkRule}
-                              title={blockedByWorkRule ? "Choose only one work action this round." : undefined}
+                              disabled={blockedByWorkRule || blockedBySabotageRule}
+                              title={blockedByWorkRule ? "Choose only one work action this round." : blockedBySabotageRule ? "Choose only one sabotage action this round." : undefined}
                             >
                               {cardArt && <img className="choice-card-art" src={asset(cardArt)} alt="" />}
                               <span>{String.fromCharCode(65 + index)}</span>
@@ -1358,7 +1434,7 @@ function App() {
                                   ))}
                                 </div>
                               )}
-                              <em>{blockedByWorkRule ? "Choose only one work action this round." : detail}</em>
+                              <em>{blockedByWorkRule ? "Choose only one work action this round." : blockedBySabotageRule ? "Choose only one sabotage action this round." : detail}</em>
                             </button>
                           );
                         })}
@@ -1441,7 +1517,7 @@ function PrivateNoticeModal({ notice, onDismiss }) {
   );
 }
 
-function ScenarioPicker({ selectedScenarioId, onSelect, compact = false }) {
+function ScenarioPicker({ selectedScenarioId, onSelect, hardMode = false, onHardModeChange, compact = false }) {
   return (
     <div className={compact ? "scenario-picker compact" : "scenario-picker"}>
       <p className="gd-kicker">Scenario</p>
@@ -1458,6 +1534,49 @@ function ScenarioPicker({ selectedScenarioId, onSelect, compact = false }) {
           </button>
         ))}
       </div>
+      {onHardModeChange && (
+        <button
+          type="button"
+          className={hardMode ? "hard-mode-toggle selected" : "hard-mode-toggle"}
+          onClick={() => onHardModeChange(!hardMode)}
+        >
+          <strong>{hardMode ? "Hard Mode On" : "Hard Mode Off"}</strong>
+          <span>{hardMode ? "Fewer slots, harsher betrayal, rival sabotage enabled." : "Standard scarcity and no direct rival attacks."}</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function RivalPanel({ activePlayer, players, phase, rivalPlayer, isBusy, onChooseRival }) {
+  const tokens = activePlayer.rivalTokensRemaining ?? 0;
+  const inWindow = RIVAL_WINDOW_PHASES.has(phase.id);
+  const usedThisPhase = (activePlayer.rivalChoicePhases || []).includes(phase.id);
+  const canChoose = inWindow && tokens > 0 && !usedThisPhase;
+  const candidates = players.filter((player) => player.id !== activePlayer.id && !player.gameOver);
+  return (
+    <div className="rival-panel">
+      <div>
+        <p className="gd-kicker">Hard Mode Rivalry</p>
+        <h3>{rivalPlayer ? `Rival: ${rivalPlayer.playerName || "Player"} (${rivalPlayer.name})` : "Choose a rival family"}</h3>
+        <p>
+          {canChoose
+            ? `Use one rival token now. Tokens left: ${tokens}.`
+            : rivalPlayer
+              ? `Sabotage cards target this family. Rival tokens left: ${tokens}.`
+              : "Rival nominations open during the speculation and deepening phases."}
+        </p>
+      </div>
+      {canChoose && (
+        <div className="rival-list">
+          {candidates.map((player) => (
+            <button key={player.id} type="button" onClick={() => onChooseRival(player.id)} disabled={isBusy}>
+              <strong>{player.playerName || "Player"}</strong>
+              <span>{player.name} Family · Score {scoreFamily(player)}</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1710,9 +1829,9 @@ function ScenarioPanel({ scenario, shared }) {
       <p className="gd-kicker">Table Scenario</p>
       {scenario && (
         <div className="scenario-entry primary">
-          <span>Room variant</span>
+          <span>{scenario.hardMode ? "Hard Mode variant" : "Room variant"}</span>
           <strong>{scenario.title}</strong>
-          <p>{scenario.detail}</p>
+          <p>{scenario.hardMode ? `${scenario.detail} Scarcity is tighter and rival sabotage is enabled.` : scenario.detail}</p>
         </div>
       )}
       {event && (

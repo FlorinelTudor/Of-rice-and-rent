@@ -7,6 +7,30 @@ const MIN_THINKING_TIME_MS = 7000;
 const BETRAYAL_POT_DRAIN = 3;
 const BETRAYAL_EXPLOIT_MARKERS = 2;
 const BETRAYAL_REPUTATION_HIT = -24;
+const RIVAL_WINDOW_PHASES = new Set(["speculation", "deepening"]);
+const SABOTAGE_CHOICES = new Set(["rival_undercut_work", "rival_spread_bank_rumors", "rival_call_in_debt", "rival_block_relief"]);
+const SABOTAGE_EFFECTS = {
+  rival_undercut_work: {
+    title: "Wages undercut",
+    attacker: { savings: 8, reputation: -14, hope: -4, exploitMarkers: 1 },
+    target: { savings: -10, stability: -9, hope: -4 },
+  },
+  rival_spread_bank_rumors: {
+    title: "Bank rumors spread",
+    attacker: { bankTrust: 6, reputation: -12, hope: -5, exploitMarkers: 1 },
+    target: { bankTrust: -16, stability: -6, hope: -7 },
+  },
+  rival_call_in_debt: {
+    title: "Debt called in",
+    attacker: { savings: 10, reputation: -16, stability: -4, exploitMarkers: 1 },
+    target: { savings: -14, debt: 12, hope: -6 },
+  },
+  rival_block_relief: {
+    title: "Relief access blocked",
+    attacker: { food: 8, reputation: -18, hope: -5, exploitMarkers: 1 },
+    target: { food: -13, health: -5, hope: -7 },
+  },
+};
 const REPEAT_CHOICE_LIMIT = 3;
 const PATTERN_CHOICE_LIMIT = 5;
 const MAX_PATTERN_PENALTY = 8;
@@ -256,6 +280,10 @@ const IMPACTS = {
   final_hope_leadership: { hope: 8, stability: 9, reputation: 12 },
   final_education_training: { education: 10, savings: 14, stability: 8 },
   final_stability_settle: { stability: 12, debt: -12, hope: 6 },
+  rival_undercut_work: SABOTAGE_EFFECTS.rival_undercut_work.attacker,
+  rival_spread_bank_rumors: SABOTAGE_EFFECTS.rival_spread_bank_rumors.attacker,
+  rival_call_in_debt: SABOTAGE_EFFECTS.rival_call_in_debt.attacker,
+  rival_block_relief: SABOTAGE_EFFECTS.rival_block_relief.attacker,
   emergency_health: EMERGENCY_ACTIONS.health.impact,
   emergency_food: EMERGENCY_ACTIONS.food.impact,
   emergency_hope: EMERGENCY_ACTIONS.hope.impact,
@@ -293,6 +321,10 @@ const ACTION_DYNAMICS = {
   hoard_relief: ["relief", "betray"],
   undercut_wages: ["work", "betray"],
   inform_on_black_market: ["betray"],
+  rival_undercut_work: ["sabotage", "betray"],
+  rival_spread_bank_rumors: ["sabotage", "betray"],
+  rival_call_in_debt: ["sabotage", "betray"],
+  rival_block_relief: ["sabotage", "betray"],
 };
 
 function choicePattern(choice) {
@@ -435,7 +467,7 @@ function roomCode() {
 
 function publicRoom(room) {
   const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
-  const scenario = scenarioById(room.scenario_id);
+  const scenario = { ...scenarioById(room.scenario_id), hardMode: Boolean(room.hard_mode) };
   return {
     roomCode: room.room_code,
     phaseIndex: room.phase_index,
@@ -472,6 +504,10 @@ function pickFamily(playerName, index, clientId, overrides = null) {
     slot: index,
     reputation: 50,
     exploitMarkers: 0,
+    rivalTokensRemaining: 2,
+    rivalChoicePhases: [],
+    rivalHistory: [],
+    sabotageHistory: [],
   });
   ["food", "health", "savings", "hope", "education", "stability", "bankTrust"].forEach((key) => {
     family[key] = clamp(family[key] + crypto.randomInt(17) - 8);
@@ -549,7 +585,7 @@ function applyChoices(family, choices, phaseId, options = {}) {
   return next;
 }
 
-function phaseCapacity(phaseId, playerCount, scenarioId = "easy_credit") {
+function phaseCapacity(phaseId, playerCount, scenarioId = "easy_credit", hardMode = false) {
   const pressure = PHASE_PRESSURE[phaseId] || PHASE_PRESSURE.postwar;
   const capacity = {
     workSlots: Math.max(1, Math.round(playerCount * pressure.work)),
@@ -567,6 +603,11 @@ function phaseCapacity(phaseId, playerCount, scenarioId = "easy_credit") {
     capacity.reliefSlots += 1;
     capacity.communityNeed = Math.max(2, capacity.communityNeed - 1);
   }
+  if (hardMode && phaseId !== "postwar" && phaseId !== "results") {
+    capacity.workSlots = Math.max(1, Math.floor(capacity.workSlots * 0.75));
+    capacity.reliefSlots = Math.max(1, Math.floor(capacity.reliefSlots * 0.75));
+    capacity.communityNeed += 1;
+  }
   return capacity;
 }
 
@@ -576,6 +617,10 @@ function choiceHasTag(choices, tag) {
 
 function hasMultipleWorkChoices(choices) {
   return choices.filter((choice) => (ACTION_DYNAMICS[choice] || []).includes("work")).length > 1;
+}
+
+function hasMultipleSabotageChoices(choices) {
+  return choices.filter((choice) => (ACTION_DYNAMICS[choice] || []).includes("sabotage")).length > 1;
 }
 
 function applySharedImpact(family, impact) {
@@ -684,7 +729,7 @@ function shockScore(room, player, phaseId) {
 function applyUnemploymentShock(room, phaseId) {
   if (phaseId !== UNEMPLOYMENT_SHOCK_PHASE || !room.players.length) return;
   const shockCount = Math.max(1, Math.round(room.players.length * 0.25));
-  const capacity = phaseCapacity(phaseId, room.players.length, room.scenario_id);
+  const capacity = phaseCapacity(phaseId, room.players.length, room.scenario_id, room.hard_mode);
   const communityCushion = (room.shared?.communityPot ?? 0) >= capacity.communityNeed;
   const selected = [...room.players]
     .sort((a, b) => shockScore(room, a, phaseId) - shockScore(room, b, phaseId))
@@ -770,7 +815,7 @@ function sharedSnapshot(room, phaseId) {
     lastShock: room.shared?.lastShock || null,
     scenarioEvent: room.shared?.scenarioEvent || null,
     eventVariant: eventVariantForRoom(room, phaseId),
-    ...phaseCapacity(phaseId, playerCount, room.scenario_id),
+    ...phaseCapacity(phaseId, playerCount, room.scenario_id, room.hard_mode),
   };
 }
 
@@ -778,7 +823,7 @@ function resolveSharedRound(room, phaseId) {
   room.resolved_phases = room.resolved_phases || {};
   if (room.resolved_phases[phaseId]) return;
 
-  const capacity = phaseCapacity(phaseId, room.players.length, room.scenario_id);
+  const capacity = phaseCapacity(phaseId, room.players.length, room.scenario_id, room.hard_mode);
   const round = room.players
     .filter((player) => !player.gameOver)
     .map((player) => ({
@@ -789,9 +834,13 @@ function resolveSharedRound(room, phaseId) {
   const relief = round.filter((entry) => choiceHasTag(entry.choices, "relief"));
   const cooperate = round.filter((entry) => choiceHasTag(entry.choices, "cooperate"));
   const betray = round.filter((entry) => choiceHasTag(entry.choices, "betray"));
+  const sabotage = room.hard_mode ? round
+    .map((entry) => ({ ...entry, choice: entry.choices.find((choice) => SABOTAGE_CHOICES.has(choice)) }))
+    .filter((entry) => entry.choice && entry.player.rivalId) : [];
   const workWinners = resolveScarcity(work, capacity.workSlots);
   const reliefWinners = resolveScarcity(relief, capacity.reliefSlots);
-  const communityPot = Math.max(0, (room.shared?.communityPot ?? 3) + cooperate.length * 2 - betray.length * BETRAYAL_POT_DRAIN);
+  const betrayalDrain = room.hard_mode ? BETRAYAL_POT_DRAIN + 1 : BETRAYAL_POT_DRAIN;
+  const communityPot = Math.max(0, (room.shared?.communityPot ?? 3) + cooperate.length * 2 - betray.length * betrayalDrain);
   const potMetNeed = communityPot >= capacity.communityNeed;
 
   room.players = room.players.map((player) => {
@@ -837,7 +886,36 @@ function resolveSharedRound(room, phaseId) {
     return next;
   });
 
-  const trustDelta = cooperate.length * 4 - betray.length * 18 + (potMetNeed ? 4 : -8) - Math.max(0, work.length - capacity.workSlots) * 2;
+  if (sabotage.length) {
+    const playerIndexById = new Map(room.players.map((player, index) => [player.id, index]));
+    sabotage.forEach(({ player, choice }) => {
+      const attackerIndex = playerIndexById.get(player.id);
+      const targetIndex = playerIndexById.get(player.rivalId);
+      const effect = SABOTAGE_EFFECTS[choice];
+      if (attackerIndex == null || targetIndex == null || !effect || room.players[targetIndex].gameOver) return;
+      const targetBefore = room.players[targetIndex];
+      const attackerBefore = room.players[attackerIndex];
+      const target = applySharedImpact(targetBefore, effect.target);
+      const attacker = {
+        ...attackerBefore,
+        sabotageHistory: [
+          ...(attackerBefore.sabotageHistory || []),
+          { phaseId, choice, targetId: targetBefore.id, targetName: targetBefore.name, title: effect.title },
+        ],
+      };
+      room.players[targetIndex] = {
+        ...target,
+        rivalHit: {
+          phaseId,
+          title: effect.title,
+          detail: `${attackerBefore.playerName || "A rival"} (${attackerBefore.name} Family) targeted your family this round.`,
+        },
+      };
+      room.players[attackerIndex] = attacker;
+    });
+  }
+
+  const trustDelta = cooperate.length * 4 - betray.length * (room.hard_mode ? 22 : 18) + (potMetNeed ? 4 : -8) - Math.max(0, work.length - capacity.workSlots) * 2;
   room.shared = {
     trust: clamp((room.shared?.trust ?? 55) + trustDelta),
     communityPot: Math.max(0, communityPot - capacity.communityNeed),
@@ -853,6 +931,7 @@ function resolveSharedRound(room, phaseId) {
       workSlots: capacity.workSlots,
       reliefSlots: capacity.reliefSlots,
       potMetNeed,
+      sabotage: sabotage.length,
     },
   };
   room.resolved_phases[phaseId] = true;
@@ -881,6 +960,7 @@ app.post("/api/game/rooms", (req, res) => {
       room_code: code,
       host_token: crypto.randomBytes(32).toString("base64url"),
       scenario_id: scenario.id,
+      hard_mode: Boolean(req.body?.hard_mode),
       test_family_overrides: req.body?.test_family_overrides || null,
       phase_index: 0,
       players: [],
@@ -947,6 +1027,14 @@ app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
       res.status(400).json({ detail: "Choose only one work action this round." });
       return;
     }
+    if (hasMultipleSabotageChoices(choices)) {
+      res.status(400).json({ detail: "Choose only one sabotage action this round." });
+      return;
+    }
+    if (choices.some((choice) => SABOTAGE_CHOICES.has(choice)) && (!room.hard_mode || !room.players[index].rivalId)) {
+      res.status(400).json({ detail: "Choose a rival before using sabotage." });
+      return;
+    }
     const phaseStartedAt = Date.parse(room.phase_started_at || room.updated_at || room.created_at || new Date().toISOString());
     const rushed = Date.now() - phaseStartedAt < MIN_THINKING_TIME_MS;
     const updated = applyChoices(room.players[index], choices, phaseId, { rushed });
@@ -961,6 +1049,50 @@ app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
     }
     room.updated_at = new Date().toISOString();
   }
+  res.json({ room: publicRoom(room) });
+});
+
+app.post("/api/game/rooms/:roomCode/rival", (req, res) => {
+  const room = getRoom(req, res);
+  if (!room) return;
+  if (!room.hard_mode) {
+    res.status(400).json({ detail: "Rival choices are only available in Hard Mode." });
+    return;
+  }
+  const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
+  if (!RIVAL_WINDOW_PHASES.has(phaseId)) {
+    res.status(400).json({ detail: "Rival nominations open during the speculation and deepening phases." });
+    return;
+  }
+  const playerIndex = room.players.findIndex((player) => player.id === req.body.player_id);
+  const rival = room.players.find((player) => player.id === req.body.rival_id);
+  if (playerIndex < 0 || !rival) {
+    res.status(404).json({ detail: "Player or rival not found in this room." });
+    return;
+  }
+  const player = room.players[playerIndex];
+  if (player.id === rival.id || player.gameOver || rival.gameOver) {
+    res.status(400).json({ detail: "Choose a living rival family other than your own." });
+    return;
+  }
+  const usedPhases = player.rivalChoicePhases || [];
+  if ((player.rivalTokensRemaining ?? 0) <= 0 || usedPhases.includes(phaseId)) {
+    res.status(400).json({ detail: "No rival nomination token is available this phase." });
+    return;
+  }
+  room.players[playerIndex] = {
+    ...player,
+    rivalId: rival.id,
+    rivalName: rival.name,
+    rivalPlayerName: rival.playerName,
+    rivalTokensRemaining: Math.max(0, (player.rivalTokensRemaining ?? 0) - 1),
+    rivalChoicePhases: [...usedPhases, phaseId],
+    rivalHistory: [
+      ...(player.rivalHistory || []),
+      { phaseId, rivalId: rival.id, rivalName: rival.name, rivalPlayerName: rival.playerName },
+    ],
+  };
+  room.updated_at = new Date().toISOString();
   res.json({ room: publicRoom(room) });
 });
 

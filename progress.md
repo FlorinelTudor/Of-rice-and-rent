@@ -27,3 +27,13 @@ Original prompt: Build a 10-25 minute multiplayer learning game where colleagues
 - Replaced the first action-card art set with object-and-setting compositions instead of family portraits, so action cards read separately from family condition portraits.
 - Added background-specific action cards for each family background, including UI injection, meter impacts, work/relief/cooperation tagging, and matching object-based card art.
 - Generated and wired object-based visuals for every playable action choice in the game, including shared phase choices, emergency choices, final bonus choices, and background-specific cards.
+
+## 2026-07-02
+
+- Added Hard Mode room setup with a host toggle. Hard Mode tightens work/relief capacity, raises community-pot pressure after the opener, and exposes hardMode in room scenario state.
+- Implemented Nemesis Mode: each family starts with two rival nomination tokens, usable during Speculation and Deepening. Players can set a rival through a dedicated room endpoint.
+- Added four sabotage action cards that appear only in Hard Mode after a rival is chosen: undercut wages, spread bank rumors, call in debt, and block relief access. Only one sabotage action can be selected per phase.
+- Added server-side sabotage resolution for local and hosted APIs: attackers take trust/exploit costs, targets receive metric damage and a private rival-hit notice next phase.
+- Added Hard Mode scoring/debrief visibility: rival attacks appear in score paths and Hard Mode adds the Sharpest Elbows award.
+- Generated and wired project assets for the four sabotage action cards.
+- Verification: npm run build passed; npm run playtest:local passed with the new Hard Mode nemesis smoke check and full 8-player run.
