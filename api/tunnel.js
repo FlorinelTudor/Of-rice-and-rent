@@ -1,4 +1,4 @@
-const TUNNEL_ORIGIN = "https://describe-accessed-farming-useful.trycloudflare.com";
+const TUNNEL_ORIGIN = "https://play.agentxplorer.com";
 
 function normalizePath(value) {
   if (Array.isArray(value)) return value.join("/");
