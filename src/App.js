@@ -992,50 +992,55 @@ function App() {
   const rushedChoiceWarning = activePlayer?.lastChoiceRushed;
   const privateNotices = useMemo(() => {
     if (!activePlayer || isResultsPhase) return [];
+    const phaseId = phase?.id || "";
+    const collapseWarning = typeof activePlayer.collapseWarning === "object" && activePlayer.collapseWarning ? activePlayer.collapseWarning : null;
+    const employmentShock = typeof activePlayer.employmentShock === "object" && activePlayer.employmentShock ? activePlayer.employmentShock : null;
+    const rivalHit = typeof activePlayer.rivalHit === "object" && activePlayer.rivalHit ? activePlayer.rivalHit : null;
+    const hiringResult = typeof activePlayer.hiringResult === "object" && activePlayer.hiringResult ? activePlayer.hiringResult : null;
     const notices = [];
-    if (activePlayer.collapseWarning && !activePlayer.gameOver) {
+    if (collapseWarning && !activePlayer.gameOver) {
       notices.push({
-        key: `${activePlayer.id}-${phase.id}-collapse-${activePlayer.collapseWarning.reason}`,
+        key: `${activePlayer.id}-${phaseId}-collapse-${collapseWarning.reason || "meter"}`,
         type: "danger",
         kicker: "Family In Danger",
-        title: activePlayer.collapseWarning.title,
-        detail: activePlayer.collapseWarning.detail,
-        image: activePlayer.collapseWarning.reason === "health" ? "family-health-crisis.png" : "family-danger-state.png",
+        title: collapseWarning.title || "Family meter in danger",
+        detail: collapseWarning.detail || "Choose the emergency card this phase to keep this family in the game.",
+        image: collapseWarning.reason === "health" ? "family-health-crisis.png" : "family-danger-state.png",
       });
     }
-    if (activePlayer.employmentShock?.phaseId === phase.id) {
+    if (employmentShock?.phaseId === phaseId) {
       notices.push({
-        key: `${activePlayer.id}-${phase.id}-job-loss`,
+        key: `${activePlayer.id}-${phaseId}-job-loss`,
         type: "job",
         kicker: "Private Family Notice",
-        title: activePlayer.employmentShock.title,
-        detail: activePlayer.employmentShock.detail,
+        title: employmentShock.title || "Main job lost",
+        detail: employmentShock.detail || "Your family lost its main job this phase.",
         image: "work-relief-market.png",
       });
     }
-    if (activePlayer.rivalHit?.phaseId === previousPhaseId) {
+    if (previousPhaseId && rivalHit?.phaseId === previousPhaseId) {
       notices.push({
-        key: `${activePlayer.id}-${activePlayer.rivalHit.phaseId}-rival-hit`,
+        key: `${activePlayer.id}-${previousPhaseId}-rival-hit`,
         type: "rival",
         kicker: "Rival Move",
-        title: activePlayer.rivalHit.title,
-        detail: activePlayer.rivalHit.detail,
+        title: rivalHit.title || "Rival pressure",
+        detail: rivalHit.detail || "A rival family targeted your family last phase.",
         image: "action-rival-call-in-debt.png",
       });
     }
-    const hasCurrentJobLoss = activePlayer.employmentShock?.phaseId === phase.id;
-    if (activePlayer.hiringResult && activePlayer.hiringResult.phaseId === previousPhaseId && !hasCurrentJobLoss) {
+    const hasCurrentJobLoss = employmentShock?.phaseId === phaseId;
+    if (previousPhaseId && hiringResult?.phaseId === previousPhaseId && !hasCurrentJobLoss) {
       notices.push({
-        key: `${activePlayer.id}-${activePlayer.hiringResult.phaseId}-hiring`,
+        key: `${activePlayer.id}-${previousPhaseId}-hiring`,
         type: "hiring",
         kicker: "Hiring Board Result",
-        title: activePlayer.hiringResult.title,
-        detail: activePlayer.hiringResult.detail,
+        title: hiringResult.title || "Hiring board result",
+        detail: hiringResult.detail || "The hiring board resolved after all choices were in.",
         image: "work-relief-market.png",
       });
     }
     return notices;
-  }, [activePlayer, isResultsPhase, phase.id, previousPhaseId]);
+  }, [activePlayer, isResultsPhase, phase?.id, previousPhaseId]);
   const activePrivateNotice = privateNotices.find((notice) => !dismissedNoticeKeys.includes(notice.key));
 
   useEffect(() => {
