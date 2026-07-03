@@ -1494,6 +1494,13 @@ function App() {
             <FamilyCard family={activePlayer} />
             {activePlayer && <Meters family={activePlayer} />}
             <ScenarioPanel scenario={scenario} shared={shared} />
+            {view === "player" && scenario?.hardMode && !activePlayer?.gameOver && (
+              <HardModeLeaderboardPanel
+                players={scoredPlayers}
+                activePlayer={activePlayer}
+                onShowLeaderboard={() => setLeaderboardVisible(true)}
+              />
+            )}
             <CommunityPanel shared={shared} playerCount={activeRoundPlayers.length || players.length} />
             <PolicyPanel shared={shared} />
             {view === "host" && !isResultsPhase && (
@@ -1520,6 +1527,12 @@ function LeaderboardModal({ players, shared, scenario, onClose }) {
     <div className="private-notice-backdrop leaderboard-backdrop" role="presentation">
       <section className="leaderboard-modal" role="dialog" aria-modal="true" aria-labelledby="leaderboard-modal-title">
         <button className="modal-close" type="button" onClick={onClose} aria-label="Close leaderboard">×</button>
+        {scenario?.hardMode && (
+          <div className="leaderboard-target-note">
+            <p className="gd-kicker">Hard Mode Targeting</p>
+            <p>Use current scores to decide who is worth naming as a rival. The leaderboard updates as the room changes.</p>
+          </div>
+        )}
         <Leaderboard
           players={players}
           shared={shared}
@@ -1529,6 +1542,27 @@ function LeaderboardModal({ players, shared, scenario, onClose }) {
           showDebrief={false}
         />
       </section>
+    </div>
+  );
+}
+
+function HardModeLeaderboardPanel({ players, activePlayer, onShowLeaderboard }) {
+  const ranked = players || [];
+  const leader = ranked[0];
+  const activeRank = ranked.findIndex((player) => player.id === activePlayer?.id) + 1;
+  return (
+    <div className="gd-panel hard-mode-leaderboard-panel">
+      <p className="gd-kicker">Hard Mode Intel</p>
+      <h2>Pick rivals by score</h2>
+      {leader && (
+        <p className="gd-sync">
+          Leader: {leader.playerName || "Player"} ({leader.name}) with {leader.score} points.
+        </p>
+      )}
+      {!!activeRank && (
+        <p className="gd-sync">Your current rank: {activeRank}/{ranked.length}</p>
+      )}
+      <button onClick={onShowLeaderboard}>Show leaderboard</button>
     </div>
   );
 }

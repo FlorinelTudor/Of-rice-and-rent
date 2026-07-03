@@ -1340,6 +1340,24 @@
   margin: 0;
 }
 
+.leaderboard-target-note {
+  margin: 0 0 12px;
+  padding: 14px 48px 14px 14px;
+  border: 1px solid rgba(122, 45, 75, .28);
+  border-radius: 8px;
+  background: #fff1f6;
+}
+
+.leaderboard-target-note p {
+  margin: 0;
+  color: #704254;
+}
+
+.leaderboard-target-note .gd-kicker {
+  margin-bottom: 4px;
+  color: #7a2d4b;
+}
+
 .modal-close {
   position: absolute;
   top: 12px;
@@ -1479,6 +1497,24 @@
 .gd-sidebar .gd-panel:last-child {
   display: grid;
   gap: 10px;
+}
+
+.hard-mode-leaderboard-panel {
+  display: grid;
+  gap: 8px;
+  border-color: rgba(122, 45, 75, .34);
+  background: linear-gradient(180deg, #fff8fa 0%, #f7e4ec 100%);
+}
+
+.hard-mode-leaderboard-panel h2 {
+  margin: 0;
+  color: #3b1525;
+  font-size: 22px;
+  line-height: 1.08;
+}
+
+.hard-mode-leaderboard-panel button {
+  margin-top: 2px;
 }
 
 .gd-submitted {
