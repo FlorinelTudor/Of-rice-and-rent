@@ -607,9 +607,75 @@
   gap: 10px;
 }
 
+.results-side-column {
+  display: grid;
+  gap: 18px;
+}
+
 .results-award-grid {
   grid-template-columns: 1fr;
   margin-top: 0;
+}
+
+.historical-standings-panel {
+  display: grid;
+  gap: 12px;
+  background: #fffdf8;
+}
+
+.historical-standings-panel h2 {
+  margin: 0;
+  color: var(--gd-ink);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.historical-standing-list {
+  display: grid;
+  gap: 8px;
+}
+
+.historical-standing-card {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid #e0d2b8;
+  border-radius: 8px;
+  background: #fff8e7;
+}
+
+.historical-standing-card > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.historical-standing-card strong {
+  color: var(--gd-ink);
+  line-height: 1.2;
+}
+
+.historical-standing-card span {
+  flex: 0 0 auto;
+  color: #4f3b1d;
+  font-size: 12px;
+  font-weight: 900;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.historical-standing-card p,
+.historical-standing-card small {
+  margin: 0;
+  color: #6d6253;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.historical-standing-card small {
+  color: #6b4f22;
 }
 
 .results-debrief,
@@ -1476,6 +1542,15 @@
   color: #31576a;
   font-weight: 700;
   line-height: 1.35;
+}
+
+.historical-method-note {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #e5d8c2;
+  color: var(--gd-muted);
+  font-size: 14px;
+  font-weight: 650;
 }
 
 .leader-row span {

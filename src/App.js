@@ -228,6 +228,63 @@ const SCENARIO_OPTIONS = [
   },
 ];
 
+const HISTORICAL_BACKGROUND_STANDINGS = {
+  Carter: {
+    cohort: "urban industrial wage families",
+    context: "Industrial output fell sharply and roughly a quarter of workers were unemployed at the worst point, so steady work and household stability were rare advantages.",
+    strengths: ["stability", "savings", "education"],
+    risks: ["debt", "health", "hope"],
+  },
+  Rosen: {
+    cohort: "Main Street merchant families",
+    context: "Small shops faced collapsing demand, cautious banks, and customers buying on credit; staying solvent required both cash discipline and community trust.",
+    strengths: ["savings", "reputation", "stability"],
+    risks: ["debt", "bankTrust", "hope"],
+  },
+  Williams: {
+    cohort: "tenant farm families",
+    context: "Farm prices fell heavily and farm foreclosures surged, so food security, debt control, and mobility mattered more than comfort.",
+    strengths: ["food", "health", "stability"],
+    risks: ["debt", "savings", "hope"],
+  },
+  Novak: {
+    cohort: "new arrival immigrant families",
+    context: "Immigrant households faced job competition, language barriers, and in some communities repatriation pressure; education and local standing were powerful buffers.",
+    strengths: ["education", "reputation", "stability"],
+    risks: ["savings", "debt", "hope"],
+  },
+  "O'Connor": {
+    cohort: "rail and transport families",
+    context: "Transport work followed the wider industrial slump, so mobility helped only when health and home stability survived the strain.",
+    strengths: ["health", "stability", "savings"],
+    risks: ["debt", "hope", "food"],
+  },
+  Bianchi: {
+    cohort: "urban garment worker families",
+    context: "Garment households often relied on long hours, piecework, and neighborhood ties; solidarity and schooling could protect the next step up.",
+    strengths: ["hope", "education", "reputation"],
+    risks: ["health", "savings", "stability"],
+  },
+  Johnson: {
+    cohort: "Black urban service families",
+    context: "Discriminatory labor markets and uneven relief access made stability and respect harder to secure, even when work effort was strong.",
+    strengths: ["reputation", "stability", "education"],
+    risks: ["savings", "food", "debt"],
+  },
+  Kowalski: {
+    cohort: "coal town mining families",
+    context: "Mining families faced dangerous work, company-town debt, and severe local unemployment; health and debt control shaped survival.",
+    strengths: ["health", "food", "reputation"],
+    risks: ["debt", "stability", "hope"],
+  },
+  Martinez: {
+    cohort: "seasonal farm labor families",
+    context: "Seasonal laborers faced irregular harvest work, low crop prices, and fragile housing; mobility helped only if food and health held up.",
+    strengths: ["food", "health", "stability"],
+    risks: ["savings", "education", "debt"],
+  },
+};
+
 const phases = [
   {
     id: "postwar",
@@ -677,6 +734,72 @@ function scoreBreakdown(family) {
   if (!dangerPenalty) parts.push("no danger lows +6");
   if (objective.completed) parts.push("objective +10");
   return parts.join(" · ");
+}
+
+function metricStandingValue(family, key) {
+  if (key === "debt") return 100 - (family.debt ?? 0);
+  if (key === "bankTrust") return family.bankTrust ?? 50;
+  if (key === "reputation") return family.reputation ?? 50;
+  return family[key] ?? 50;
+}
+
+function metricLabel(key) {
+  return ACTION_METRIC_LABELS[key] || key;
+}
+
+function ordinalPercentile(value) {
+  const n = Math.max(1, Math.min(99, Math.round(value)));
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  const suffix = mod100 >= 11 && mod100 <= 13 ? "th" : mod10 === 1 ? "st" : mod10 === 2 ? "nd" : mod10 === 3 ? "rd" : "th";
+  return `${n}${suffix}`;
+}
+
+function historicalBand(percentile) {
+  if (percentile >= 90) return "top 10%";
+  if (percentile >= 75) return "top quarter";
+  if (percentile >= 55) return "above the middle";
+  if (percentile >= 35) return "near the middle";
+  if (percentile >= 20) return "lower quarter";
+  return "bottom fifth";
+}
+
+function historicalStandingFor(family) {
+  const benchmark = HISTORICAL_BACKGROUND_STANDINGS[family.name] || {
+    cohort: "comparable families",
+    context: "Families with similar work and savings positions faced very different outcomes depending on debt, health, food, trust, and timing.",
+    strengths: ["stability", "savings", "hope"],
+    risks: ["debt", "food", "health"],
+  };
+  const score = typeof family.score === "number" ? family.score : scoreFamily(family);
+  const objective = objectiveResult(family);
+  const hardshipCredit = Math.min(7, Math.max(0, startingHardship(family) - 35) * 0.14);
+  const dangerDrag = lowestRecordedMeter(family) < 25 ? 4 : 0;
+  const percentile = Math.max(
+    1,
+    Math.min(
+      99,
+      Math.round(5 + score * 0.82 + hardshipCredit + (objective.completed ? 6 : -2) - (family.gameOver ? 12 : 0) - dangerDrag)
+    )
+  );
+  const bestStrength = [...benchmark.strengths].sort((a, b) => metricStandingValue(family, b) - metricStandingValue(family, a))[0];
+  const weakestRisk = [...benchmark.risks].sort((a, b) => metricStandingValue(family, a) - metricStandingValue(family, b))[0];
+  const bestLabel = metricLabel(bestStrength).toLowerCase();
+  const weakLabel = metricLabel(weakestRisk).toLowerCase();
+  const driver =
+    percentile >= 75
+      ? `Their ${bestLabel} put them ahead of most comparable households.`
+      : percentile <= 35
+        ? `Their ${weakLabel} kept them close to the hardest-hit households.`
+        : `They landed in the contested middle: ${bestLabel} helped, but ${weakLabel} still held them back.`;
+  return {
+    percentile,
+    percentileLabel: ordinalPercentile(percentile),
+    band: historicalBand(percentile),
+    cohort: benchmark.cohort,
+    context: benchmark.context,
+    driver,
+  };
 }
 
 function flattenChoices(family) {
@@ -1750,20 +1873,23 @@ function ResultsPhase({
           <p className="gd-note">Each row shows how that family reached its score. Higher meters help; debt, danger lows, collapse, betrayal, rushed play, predictable play, and community exclusion pull the score down.</p>
         </div>
 
-        <div className="gd-panel results-awards">
-          <p className="gd-kicker">Awards</p>
-          <div className="award-grid results-award-grid">
-            {awards.map((award) => (
-              <div className={award.primary ? "award-card primary" : "award-card"} key={award.id}>
-                <span>{award.primary ? "★" : "•"}</span>
-                <div>
-                  <strong>{award.title}</strong>
-                  <p>{award.player.playerName || "Player"} ({award.player.name} Family)</p>
-                  <small>{award.detail}</small>
+        <div className="results-side-column">
+          <div className="gd-panel results-awards">
+            <p className="gd-kicker">Awards</p>
+            <div className="award-grid results-award-grid">
+              {awards.map((award) => (
+                <div className={award.primary ? "award-card primary" : "award-card"} key={award.id}>
+                  <span>{award.primary ? "★" : "•"}</span>
+                  <div>
+                    <strong>{award.title}</strong>
+                    <p>{award.player.playerName || "Player"} ({award.player.name} Family)</p>
+                    <small>{award.detail}</small>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+          <HistoricalStandingsPanel players={players} />
         </div>
       </section>
 
@@ -1774,6 +1900,9 @@ function ResultsPhase({
           {debrief.map((takeaway) => (
             <p key={takeaway}>{takeaway}</p>
           ))}
+          <p className="historical-method-note">
+            Historical standing is a teaching estimate: it compares the final family ledger with known pressures on similar households, including job loss, farm and bank stress, discrimination, relief access, and recovery timing.
+          </p>
         </div>
         <div className="rematch-panel results-rematch">
           <p className="gd-kicker">Next Table Challenge</p>
@@ -1793,6 +1922,30 @@ function ResultsPhase({
           {view !== "host" && !nextRoomCode && <small>Waiting for the host to start the next room.</small>}
         </div>
       </section>
+    </div>
+  );
+}
+
+function HistoricalStandingsPanel({ players }) {
+  return (
+    <div className="gd-panel historical-standings-panel">
+      <p className="gd-kicker">Historical Standing</p>
+      <h2>Compared with similar families</h2>
+      <div className="historical-standing-list">
+        {players.map((player) => {
+          const historical = historicalStandingFor(player);
+          return (
+            <div className="historical-standing-card" key={player.id}>
+              <div>
+                <strong>{player.playerName || "Player"} ({player.name})</strong>
+                <span>{historical.percentileLabel} percentile · {historical.band}</span>
+              </div>
+              <p>Among {historical.cohort}.</p>
+              <small>{historical.driver}</small>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

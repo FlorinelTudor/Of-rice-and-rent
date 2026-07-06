@@ -37,3 +37,7 @@ Original prompt: Build a 10-25 minute multiplayer learning game where colleagues
 - Added Hard Mode scoring/debrief visibility: rival attacks appear in score paths and Hard Mode adds the Sharpest Elbows award.
 - Generated and wired project assets for the four sabotage action cards.
 - Verification: npm run build passed; npm run playtest:local passed with the new Hard Mode nemesis smoke check and full 8-player run.
+
+## 2026-07-06
+
+- Added background-aware historical standing to the final results and leaderboard rows. Each family now receives a scenario-calibrated percentile against comparable households from their background, plus a short driver explaining whether their strongest or weakest metrics shaped the outcome.
