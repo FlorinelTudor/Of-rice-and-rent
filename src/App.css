@@ -1136,6 +1136,38 @@
   margin-top: 16px;
 }
 
+.choice-consequence-strip {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 4px solid #a66d27;
+  background: #fbf0dc;
+  color: #503a22;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.choice-consequence-strip strong {
+  color: #6d4313;
+  font-size: 12px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.receipt-consequences {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid #decda9;
+  background: #fff8e9;
+  color: #594022;
+  font-size: 14px;
+}
+
+.receipt-consequences span { display: block; }
+
 .family-image img {
   height: auto;
   max-height: 300px;

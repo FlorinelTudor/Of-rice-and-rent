@@ -840,6 +840,17 @@ function choiceImpactChips(choiceId) {
   });
 }
 
+function consequencePreviewFor(family, choices, phaseStartedAt) {
+  if (!family || !choices.length) return [];
+  const warnings = [];
+  const elapsedMs = Date.now() - Date.parse(phaseStartedAt || 0);
+  if (Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs < 5000) warnings.push("Rushed choices reduce positive gains");
+  if (choices.some((choice) => (family.choiceRepeatCounts?.[choice] || 0) >= 3)) warnings.push("Repeated action reduces this round's gains");
+  if (choices.some((choice) => BETRAYAL_CHOICES.has(choice))) warnings.push("Betrayal weakens trust and can leave exploit markers");
+  if (family.communityMemoryHits) warnings.push("Community memory may limit shared protection");
+  return warnings;
+}
+
 function objectiveResult(family) {
   const choices = flattenChoices(family);
   const usedMigrationPath = choices.some((choice) => MOBILITY_CHOICES.has(choice));
@@ -1130,6 +1141,10 @@ function App() {
     [players]
   );
   const rushedChoiceWarning = activePlayer?.lastChoiceRushed;
+  const consequencePreview = useMemo(
+    () => consequencePreviewFor(activePlayer, selected, shared?.phaseStartedAt),
+    [activePlayer, selected, shared?.phaseStartedAt]
+  );
   const privateNotices = useMemo(() => {
     if (!activePlayer || isResultsPhase) return [];
     const phaseId = phase?.id || "";
@@ -1711,6 +1726,12 @@ function App() {
                     <img src={asset("new-deal-choice-background.png")} alt="" />
                     <div className="gd-choice-content">
                       <p className="gd-kicker">Make a decision · Choose 2 actions</p>
+                      {!!consequencePreview.length && (
+                        <div className="choice-consequence-strip" role="status">
+                          <strong>Consequences in play</strong>
+                          <span>{consequencePreview.join(" · ")}</span>
+                        </div>
+                      )}
                       {activePlayer?.collapseWarning && (
                         <div className="emergency-choice-banner">
                           <strong>Emergency decision required</strong>
@@ -1772,8 +1793,13 @@ function App() {
                           );
                         })}
                       </div>
-                      <button className="gd-submit" onClick={submitChoices} disabled={selected.length !== 2 || isBusy}>
-                        {isBusy ? "Submitting..." : "Submit choices"}
+                      <button
+                        className="gd-submit"
+                        onClick={submitChoices}
+                        disabled={selected.length !== 2 || isBusy}
+                        title={consequencePreview.length ? consequencePreview.join(". ") : undefined}
+                      >
+                        {isBusy ? "Submitting..." : consequencePreview.length ? "Lock in with consequences" : "Lock in 2 decisions"}
                       </button>
                     </div>
                   </div>
@@ -1866,6 +1892,7 @@ function HardModeLeaderboardPanel({ players, activePlayer, onShowLeaderboard }) 
 
 function OutcomeReceiptModal({ receipt, onDismiss }) {
   const deltas = Object.entries(receipt.deltas || {});
+  const consequences = receipt.consequences || {};
   return (
     <div className="private-notice-backdrop receipt-backdrop" role="presentation">
       <section className="outcome-receipt" role="dialog" aria-modal="true" aria-labelledby="outcome-receipt-title">
@@ -1881,6 +1908,14 @@ function OutcomeReceiptModal({ receipt, onDismiss }) {
             <span className={value > 0 ? "positive" : "negative"} key={metric}><b>{value > 0 ? `+${value}` : value}</b> {metric}</span>
           )) : <span>No family meter changed.</span>}
         </div>
+        {(consequences.rushed || consequences.predictable || consequences.communityMemoryHits) && (
+          <div className="receipt-consequences">
+            <b>Round consequences</b>
+            {consequences.rushed && <span>Rushed: positive gains applied at {Math.round((consequences.positiveGainMultiplier || 1) * 100)}%.</span>}
+            {consequences.predictable && <span>Predictable strategy: this round's positive gains were reduced.</span>}
+            {!!consequences.communityMemoryHits && <span>Community memory: {consequences.communityMemoryHits} exclusion marker{consequences.communityMemoryHits === 1 ? "" : "s"} remain.</span>}
+          </div>
+        )}
         {receipt.hiring && <p><b>{receipt.hiring.title}:</b> {receipt.hiring.detail}</p>}
         <p><b>Community:</b> {receipt.communityDetail}</p>
         {receipt.rival && <p><b>Rival action:</b> {receipt.rival.detail}</p>}

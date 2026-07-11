@@ -115,6 +115,33 @@ describe("staged tabletop experience", () => {
     expect(choiceButton.querySelector(".choice-selection-stamp")?.textContent).toContain("Choice made");
   });
 
+  test("shows choice consequences before a repeated action is locked in", async () => {
+    const repeatedPlayer = {
+      ...player,
+      choiceRepeatCounts: { keep_factory_job: 3 },
+    };
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      players: [repeatedPlayer],
+      activePlayerId: repeatedPlayer.id,
+      shared: { ...room.shared, phaseStartedAt: new Date(Date.now() - 6000).toISOString() },
+    }));
+    await act(async () => root.render(<App />));
+
+    const decisionButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Make a decision")
+    );
+    await act(async () => decisionButton.click());
+    const repeatedChoice = Array.from(container.querySelectorAll(".gd-choice-grid button")).find(
+      (button) => button.textContent.includes("Keep factory job")
+    );
+    await act(async () => repeatedChoice.click());
+
+    expect(container.querySelector(".choice-consequence-strip")).not.toBeNull();
+    expect(container.textContent).toContain("Repeated action reduces this round's gains");
+    expect(Array.from(container.querySelectorAll(".gd-submit")).some((button) => button.textContent.includes("Lock in with consequences"))).toBe(true);
+  });
+
   test("keeps acknowledged private notices in the telegram station", async () => {
     window.localStorage.setItem("gd-game-state", JSON.stringify({
       ...savedPlayerState(),

@@ -1,17 +1,23 @@
 const crypto = require("crypto");
 const express = require("express");
 const {
+  MIN_THINKING_TIME_MS,
+  antiGamingMultiplier,
+  choicePattern,
   communityOutcomeFor,
   metricDeltas,
   metricSnapshot,
   policyImpactForPlayer,
   policyVoteForPhase,
+  PATTERN_CHOICE_LIMIT,
+  positiveImpactMultiplier,
+  REPEAT_CHOICE_LIMIT,
   resolvePolicyVote,
+  scaledImpact,
 } = require("../game/shared-rules");
 const path = require("path");
 
 const MAX_PLAYERS = 8;
-const MIN_THINKING_TIME_MS = 7000;
 const BETRAYAL_POT_DRAIN = 3;
 const BETRAYAL_EXPLOIT_MARKERS = 2;
 const BETRAYAL_REPUTATION_HIT = -24;
@@ -39,8 +45,6 @@ const SABOTAGE_EFFECTS = {
     target: { food: -13, health: -5, hope: -7 },
   },
 };
-const REPEAT_CHOICE_LIMIT = 3;
-const PATTERN_CHOICE_LIMIT = 5;
 const MAX_PATTERN_PENALTY = 8;
 const UNEMPLOYMENT_SHOCK_PHASE = "deepening";
 const COLLAPSE_REASONS = {
@@ -335,31 +339,6 @@ const ACTION_DYNAMICS = {
   rival_block_relief: ["sabotage", "betray"],
 };
 
-function choicePattern(choice) {
-  if (choice.startsWith("emergency_")) return "emergency";
-  if (choice.startsWith("final_")) return "final_bonus";
-  if (["take_store_credit", "buy_radio_credit", "borrow_to_invest"].includes(choice)) return "credit";
-  if (["invest_stocks", "sell_stocks_now", "withdraw_bank_cash"].includes(choice)) return "speculation";
-  if (["cut_food_rent", "sell_possessions", "pawn_heirloom", "delay_medical_care"].includes(choice)) return "austerity";
-  if (["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"].includes(choice) || ACTION_DYNAMICS[choice]?.includes("mobility")) return "mobility";
-  if (ACTION_DYNAMICS[choice]?.includes("betray")) return "betrayal";
-  if (ACTION_DYNAMICS[choice]?.includes("cooperate")) return "community";
-  if (ACTION_DYNAMICS[choice]?.includes("relief")) return "relief";
-  if (ACTION_DYNAMICS[choice]?.includes("work")) return "work";
-  if (["night_school", "fund_training", "keep_children_school"].includes(choice) || ACTION_DYNAMICS[choice]?.includes("skills")) return "skills";
-  return "household";
-}
-
-function antiGamingMultiplier(family, choices) {
-  const repeatCounts = family.choiceRepeatCounts || {};
-  const patternCounts = family.choicePatternCounts || {};
-  const hasRepeatedChoice = choices.some((choice) => (repeatCounts[choice] || 0) >= REPEAT_CHOICE_LIMIT);
-  const hasRepeatedPattern = choices.some((choice) => (patternCounts[choicePattern(choice)] || 0) >= PATTERN_CHOICE_LIMIT);
-  if (hasRepeatedChoice && hasRepeatedPattern) return 0.8;
-  if (hasRepeatedChoice || hasRepeatedPattern) return 0.9;
-  return 1;
-}
-
 const PHASE_PRESSURE = {
   postwar: { work: 0.7, relief: 0.2, need: 0.55 },
   recession_1921: { work: 0.45, relief: 0.25, need: 0.7 },
@@ -454,18 +433,6 @@ function objectiveVariantForFamily(family, index, clientId) {
   return variants[hashIndex(`${family.name}:${clientId || ""}:${index}`, variants.length)];
 }
 
-function positiveImpactMultiplier(family, rushed) {
-  if (!rushed) return 1;
-  return Math.max(0.55, 0.85 - (family.rushedChoiceCount || 0) * 0.1);
-}
-
-function scaledImpact(key, value, multiplier) {
-  if (multiplier >= 1) return value;
-  if (key === "debt" && value < 0) return Math.round(value * multiplier);
-  if (key !== "debt" && value > 0) return Math.round(value * multiplier);
-  return value;
-}
-
 function roomCode() {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -547,12 +514,12 @@ function applyChoices(family, choices, phaseId, options = {}) {
       detail: warning.detail,
     };
   }
-  const patternMultiplier = antiGamingMultiplier(family, choices);
-  const multiplier = positiveImpactMultiplier(family, options.rushed) * patternMultiplier;
+  const patternMultiplier = antiGamingMultiplier(family, choices, ACTION_DYNAMICS);
+  const multiplier = positiveImpactMultiplier(family.rushedChoiceCount, options.rushed) * patternMultiplier;
   next.choiceRepeatCounts = { ...(family.choiceRepeatCounts || {}) };
   next.choicePatternCounts = { ...(family.choicePatternCounts || {}) };
   choices.forEach((choice) => {
-    const pattern = choicePattern(choice);
+    const pattern = choicePattern(choice, ACTION_DYNAMICS);
     next.choiceRepeatCounts[choice] = (next.choiceRepeatCounts[choice] || 0) + 1;
     next.choicePatternCounts[pattern] = (next.choicePatternCounts[pattern] || 0) + 1;
     if (next.choiceRepeatCounts[choice] > REPEAT_CHOICE_LIMIT) {
@@ -821,6 +788,7 @@ function sharedSnapshot(room, phaseId) {
   const policyState = room.policy_votes?.[phaseId] || null;
   return {
     trust: room.shared?.trust ?? 55,
+    phaseStartedAt: room.phase_started_at || null,
     communityPot: room.shared?.communityPot ?? 3,
     lastRound: room.shared?.lastRound || "No shared decision has resolved yet.",
     activePolicy: room.shared?.activePolicy || null,
@@ -977,6 +945,13 @@ function resolveSharedRound(room, phaseId) {
         phaseId,
         choices,
         deltas: metricDeltas(before, metricSnapshot(player)),
+        consequences: {
+          rushed: Boolean(player.lastChoiceRushed),
+          positiveGainMultiplier: player.lastChoiceMultiplier ?? 1,
+          predictable: Boolean(player.lastPatternLimited),
+          exploitMarkers: player.exploitMarkers || 0,
+          communityMemoryHits: player.communityMemoryHits || 0,
+        },
         hiring: player.hiringResult?.phaseId === phaseId ? player.hiringResult : null,
         communityTier: communityOutcome.tier,
         communityDetail: communityOutcome.tier === "surplus"

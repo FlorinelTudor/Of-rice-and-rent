@@ -1,7 +1,12 @@
 const {
+  MIN_THINKING_TIME_MS,
+  antiGamingMultiplier,
   communityOutcomeFor,
+  consequenceWarningsFor,
+  positiveImpactMultiplier,
   policyVoteForPhase,
   resolvePolicyVote,
+  scaledImpact,
 } = require("../game/shared-rules");
 
 describe("shared multiplayer rules", () => {
@@ -45,5 +50,27 @@ describe("shared multiplayer rules", () => {
     [12, 8, 8, "surplus", 12],
   ])("classifies pot %i against need %i", (pot, need, activeCount, tier, spend) => {
     expect(communityOutcomeFor(pot, need, activeCount)).toMatchObject({ tier, spend });
+  });
+
+  test("uses five seconds as the minimum thinking window", () => {
+    expect(MIN_THINKING_TIME_MS).toBe(5000);
+  });
+
+  test("scales only positive gains when a family submits rushed choices", () => {
+    expect(positiveImpactMultiplier(0, false)).toBe(1);
+    expect(positiveImpactMultiplier(0, true)).toBe(0.85);
+    expect(positiveImpactMultiplier(2, true)).toBe(0.65);
+    expect(scaledImpact("savings", 20, 0.65)).toBe(13);
+    expect(scaledImpact("health", -20, 0.65)).toBe(-20);
+  });
+
+  test("keeps repeated-pattern penalties bounded and visible", () => {
+    expect(antiGamingMultiplier({ choiceRepeatCounts: { keep_cash: 3 }, choicePatternCounts: { household: 0 } }, ["keep_cash"])).toBe(0.9);
+    expect(antiGamingMultiplier({ choiceRepeatCounts: { keep_cash: 3 }, choicePatternCounts: { household: 5 } }, ["keep_cash"])).toBe(0.8);
+    expect(consequenceWarningsFor({ choiceRepeatCounts: { keep_cash: 3 }, choicePatternCounts: { household: 5 } }, ["keep_cash"], { elapsedMs: 2000 })).toEqual([
+      "Rushed choices reduce positive gains",
+      "Repeated action reduces this round's gains",
+      "Predictable strategy reduces this round's gains",
+    ]);
   });
 });

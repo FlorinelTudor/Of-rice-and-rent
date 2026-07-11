@@ -79,6 +79,60 @@ const POLICY_VOTES = {
   },
 };
 
+const MIN_THINKING_TIME_MS = 5000;
+const REPEAT_CHOICE_LIMIT = 3;
+const PATTERN_CHOICE_LIMIT = 5;
+
+function choicePattern(choice, actionDynamics = {}) {
+  const dynamics = actionDynamics[choice] || [];
+  if (choice.startsWith("emergency_")) return "emergency";
+  if (choice.startsWith("final_")) return "final_bonus";
+  if (["take_store_credit", "buy_radio_credit", "borrow_to_invest"].includes(choice)) return "credit";
+  if (["invest_stocks", "sell_stocks_now", "withdraw_bank_cash"].includes(choice)) return "speculation";
+  if (["cut_food_rent", "sell_possessions", "pawn_heirloom", "delay_medical_care"].includes(choice)) return "austerity";
+  if (["move_to_city", "move_with_relatives", "move_for_work_camp", "seek_defense_work"].includes(choice) || dynamics.includes("mobility")) return "mobility";
+  if (dynamics.includes("betray")) return "betrayal";
+  if (dynamics.includes("cooperate")) return "community";
+  if (dynamics.includes("relief")) return "relief";
+  if (dynamics.includes("work")) return "work";
+  if (["night_school", "fund_training", "keep_children_school"].includes(choice) || dynamics.includes("skills")) return "skills";
+  return "household";
+}
+
+function antiGamingMultiplier(family = {}, choices = [], actionDynamics = {}) {
+  const repeatCounts = family.choiceRepeatCounts || {};
+  const patternCounts = family.choicePatternCounts || {};
+  const hasRepeatedChoice = choices.some((choice) => (repeatCounts[choice] || 0) >= REPEAT_CHOICE_LIMIT);
+  const hasRepeatedPattern = choices.some((choice) => (patternCounts[choicePattern(choice, actionDynamics)] || 0) >= PATTERN_CHOICE_LIMIT);
+  if (hasRepeatedChoice && hasRepeatedPattern) return 0.8;
+  if (hasRepeatedChoice || hasRepeatedPattern) return 0.9;
+  return 1;
+}
+
+function positiveImpactMultiplier(rushedCount = 0, rushed = false) {
+  if (!rushed) return 1;
+  return Number(Math.max(0.55, 0.85 - Number(rushedCount || 0) * 0.1).toFixed(2));
+}
+
+function scaledImpact(key, value, multiplier) {
+  if (multiplier >= 1) return value;
+  if (key === "debt" && value < 0) return Math.round(value * multiplier);
+  if (key !== "debt" && value > 0) return Math.round(value * multiplier);
+  return value;
+}
+
+function consequenceWarningsFor(family = {}, choices = [], { elapsedMs = MIN_THINKING_TIME_MS } = {}, actionDynamics = {}) {
+  const warnings = [];
+  if (elapsedMs < MIN_THINKING_TIME_MS) warnings.push("Rushed choices reduce positive gains");
+  const repeatCounts = family.choiceRepeatCounts || {};
+  const patternCounts = family.choicePatternCounts || {};
+  if (choices.some((choice) => (repeatCounts[choice] || 0) >= REPEAT_CHOICE_LIMIT)) warnings.push("Repeated action reduces this round's gains");
+  if (choices.some((choice) => (patternCounts[choicePattern(choice, actionDynamics)] || 0) >= PATTERN_CHOICE_LIMIT)) warnings.push("Predictable strategy reduces this round's gains");
+  if (choices.some((choice) => choicePattern(choice, actionDynamics) === "betrayal" && (patternCounts.betrayal || 0) >= 1)) warnings.push("Betrayal increases exploit risk and weakens reputation");
+  if (family.communityMemoryHits) warnings.push("Community memory may reduce access to shared protection");
+  return warnings;
+}
+
 function policyVoteForPhase(phaseId) {
   return POLICY_VOTES[phaseId] || null;
 }
@@ -144,11 +198,19 @@ function mergeImpacts(base, extra) {
 }
 
 module.exports = {
+  MIN_THINKING_TIME_MS,
+  PATTERN_CHOICE_LIMIT,
+  REPEAT_CHOICE_LIMIT,
+  antiGamingMultiplier,
   POLICY_VOTES,
   communityOutcomeFor,
+  consequenceWarningsFor,
+  choicePattern,
   metricDeltas,
   metricSnapshot,
   policyImpactForPlayer,
   policyVoteForPhase,
+  positiveImpactMultiplier,
   resolvePolicyVote,
+  scaledImpact,
 };
