@@ -1,5 +1,6 @@
 import "@/App.css";
 import { Component, useEffect, useMemo, useRef, useState } from "react";
+import { playTabletopSound } from "@/tabletopSound";
 
 const asset = (name) => `${process.env.PUBLIC_URL || ""}/depression-game/${name}`;
 const MAX_PLAYERS = 8;
@@ -1083,9 +1084,15 @@ function App() {
   const [isBusy, setIsBusy] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState(savedGame.lastSyncedAt || 0);
   const [phaseRevealVisible, setPhaseRevealVisible] = useState(false);
-  const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState([]);
+  const [activeStation, setActiveStation] = useState(savedGame.activeStation || "phase");
+  const [soundEnabled, setSoundEnabled] = useState(savedGame.soundEnabled ?? true);
+  const [telegramArchive, setTelegramArchive] = useState(savedGame.telegramArchive || []);
+  const [readTelegramKeys, setReadTelegramKeys] = useState(savedGame.readTelegramKeys || []);
+  const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState(savedGame.dismissedNoticeKeys || []);
   const [leaderboardVisible, setLeaderboardVisible] = useState(false);
   const viewRef = useRef(savedGame.view || "start");
+  const lastNoticeSoundRef = useRef("");
+  const tableSetSoundRef = useRef("");
   const joinClientIdRef = useRef(savedGame.joinClientId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
   const phase = phases[phaseIndex] || phases[0];
@@ -1201,11 +1208,16 @@ function App() {
         playerName,
         activePlayerId,
         selected,
+        activeStation,
+        soundEnabled,
+        telegramArchive,
+        readTelegramKeys,
+        dismissedNoticeKeys,
         lastSyncedAt,
         joinClientId: joinClientIdRef.current,
       })
     );
-  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, lastSyncedAt]);
+  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, activeStation, soundEnabled, telegramArchive, readTelegramKeys, dismissedNoticeKeys, lastSyncedAt]);
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
@@ -1216,15 +1228,55 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [phase.id, phaseIndex, view]);
 
+  useEffect(() => {
+    setActiveStation("phase");
+  }, [phase.id, view]);
+
+  useEffect(() => {
+    if (!privateNotices.length) return;
+    setTelegramArchive((current) => {
+      const known = new Set(current.map((notice) => notice.key));
+      const incoming = privateNotices
+        .filter((notice) => !known.has(notice.key))
+        .map((notice) => ({ ...notice, phaseId: phase.id, years: phase.years }));
+      return incoming.length ? [...incoming, ...current] : current;
+    });
+  }, [phase.id, phase.years, privateNotices]);
+
+  useEffect(() => {
+    if (!activePrivateNotice || phaseRevealVisible || lastNoticeSoundRef.current === activePrivateNotice.key) return;
+    lastNoticeSoundRef.current = activePrivateNotice.key;
+    playTabletopSound("telegram", { enabled: soundEnabled, volume: view === "host" ? 0.8 : 0.45 });
+  }, [activePrivateNotice, phaseRevealVisible, soundEnabled, view]);
+
+  useEffect(() => {
+    if (
+      !soundEnabled ||
+      phaseRevealVisible ||
+      isResultsPhase ||
+      (view !== "host" && view !== "player") ||
+      tableSetSoundRef.current === phase.id
+    ) return;
+    tableSetSoundRef.current = phase.id;
+    playTabletopSound("newspaper", { enabled: true, volume: view === "host" ? 0.8 : 0.38 });
+  }, [isResultsPhase, phase.id, phaseRevealVisible, soundEnabled, view]);
+
   function syncRoom(room) {
     if (!room) return;
+    const nextPhaseIndex = room.phaseIndex || 0;
+    if (nextPhaseIndex !== phaseIndex) {
+      playTabletopSound(nextPhaseIndex >= phases.length - 1 ? "stamp" : "paper", {
+        enabled: soundEnabled,
+        volume: view === "host" ? 0.85 : 0.4,
+      });
+    }
     setRoomCode(room.roomCode);
     setPlayers(room.players || []);
     setShared(room.shared || null);
     setScenario(room.scenario || null);
     setRematchScenario(room.rematchScenario || null);
     setNextRoomCode(room.nextRoomCode || "");
-    setPhaseIndex(room.phaseIndex || 0);
+    setPhaseIndex(nextPhaseIndex);
     setLastSyncedAt(Date.now());
   }
 
@@ -1291,6 +1343,7 @@ function App() {
   }, [rematchScenario?.id]);
 
   async function createHostRoom(scenarioId = selectedScenarioId) {
+    playTabletopSound("paper", { enabled: soundEnabled, volume: 0.65 });
     const payload = { scenario_id: scenarioId, hard_mode: selectedHardMode };
     if (isResultsPhase && roomCode && hostToken) {
       payload.previous_room_code = roomCode;
@@ -1309,6 +1362,7 @@ function App() {
   }
 
   function showJoinScreen() {
+    playTabletopSound("paper", { enabled: soundEnabled, volume: 0.35 });
     window.history.pushState({ gdView: "join" }, "", window.location.href);
     setView("join");
   }
@@ -1321,6 +1375,7 @@ function App() {
   }
 
   async function joinRoom() {
+    playTabletopSound("cards", { enabled: soundEnabled, volume: 0.38 });
     const code = roomCode.trim().toUpperCase();
     if (!code) {
       setApiError("Ask the host for the room code first.");
@@ -1372,12 +1427,31 @@ function App() {
   }
 
   function toggleChoice(choice) {
+    if (!selected.includes(choice)) {
+      playTabletopSound("stamp", { enabled: soundEnabled, volume: view === "host" ? 0.8 : 0.5 });
+    }
     setSelected((current) => {
       if (current.includes(choice)) return current.filter((item) => item !== choice);
       if (WORK_CHOICES.has(choice) && current.some((item) => WORK_CHOICES.has(item))) return current;
       if (SABOTAGE_CHOICE_IDS.includes(choice) && current.some((item) => SABOTAGE_CHOICE_IDS.includes(item))) return current;
       return current.length >= 2 ? [current[1], choice] : [...current, choice];
     });
+  }
+
+  function openTableStation(station) {
+    if (station === "decisions") {
+      playTabletopSound("cards", { enabled: soundEnabled, volume: view === "host" ? 0.75 : 0.42 });
+    } else if (station === "telegram") {
+      setReadTelegramKeys((current) => [...new Set([...current, ...telegramArchive.map((notice) => notice.key)])]);
+      playTabletopSound("paper", { enabled: soundEnabled, volume: view === "host" ? 0.6 : 0.36 });
+    }
+    setActiveStation(station);
+  }
+
+  function toggleSound() {
+    const nextValue = !soundEnabled;
+    setSoundEnabled(nextValue);
+    if (nextValue) playTabletopSound("stamp", { enabled: true, volume: 0.35 });
   }
 
   async function chooseRival(rivalId) {
@@ -1422,6 +1496,7 @@ function App() {
   function dismissPrivateNotice() {
     if (!activePrivateNotice) return;
     setDismissedNoticeKeys((current) => [...current, activePrivateNotice.key]);
+    setReadTelegramKeys((current) => [...new Set([...current, activePrivateNotice.key])]);
   }
 
   return (
@@ -1431,7 +1506,18 @@ function App() {
           <p className="gd-kicker">Main Street, 1919</p>
           <h1>Rent, Beans and Dreams</h1>
         </div>
-        <div className="gd-room">Room {roomCode || "not started"}</div>
+        <div className="gd-topbar-actions">
+          <button
+            className="tabletop-sound-toggle"
+            type="button"
+            onClick={toggleSound}
+            aria-label={soundEnabled ? "Mute game sound" : "Enable game sound"}
+            aria-pressed={soundEnabled}
+          >
+            {soundEnabled ? "Sound on" : "Sound off"}
+          </button>
+          <div className="gd-room">Room {roomCode || "not started"}</div>
+        </div>
       </section>
       {apiError && <div className="gd-alert">{apiError}</div>}
       {activePrivateNotice && !phaseRevealVisible && (
@@ -1448,16 +1534,27 @@ function App() {
 
       {view === "start" && (
         <section className="gd-start">
-          <div className="gd-hero">
-            <img src={asset("login-hero.png")} alt="" />
-            <div>
-              <p className="gd-kicker">1919-1942 multiplayer learning game</p>
-              <h2>“The chief business of the American people is business.”</h2>
-              <p className="quote-source">Calvin Coolidge, 1925</p>
-              <p>
-                Join with a room code, receive a random family, and choose two actions each round as public news changes the
-                economy around you. Your food, health, savings, debt, hope, and education shape your final score.
-              </p>
+          <div className="gd-home-ledger">
+            <div className="gd-home-family">
+              <img src={asset("homepage-family-1919.png")} alt="A family gathered around its household ledger in 1919" />
+              <p>An ordinary morning. Every choice matters.</p>
+            </div>
+            <div className="gd-home-entry">
+              <div className="gd-home-entry-sheet">
+                <p className="gd-kicker">A room-sized historical game</p>
+                <h2>Take your place at the table.</h2>
+                <p className="gd-home-intro">
+                  Join a room, receive a household, and make two private choices as the world around you changes.
+                </p>
+                <div className="gd-home-mechanics" aria-label="How the game works">
+                  <span>Family <b>Assigned</b></span>
+                  <span>Choices <b>Private</b></span>
+                  <span>Table talk <b>Shared</b></span>
+                </div>
+                <blockquote>
+                  “The chief business of the American people is business.”
+                  <cite>Calvin Coolidge, 1925</cite>
+                </blockquote>
                 {canCreateHost && (
                   <ScenarioPicker
                     selectedScenarioId={selectedScenarioId}
@@ -1467,12 +1564,13 @@ function App() {
                     compact
                   />
                 )}
-                <div className="gd-actions">
+                <div className="gd-actions gd-home-actions">
                 {canCreateHost ? (
                   <button onClick={() => createHostRoom()} disabled={isBusy}>{isBusy ? "Creating..." : "Create host room"}</button>
                 ) : (
                   <button onClick={showJoinScreen}>Join as player</button>
                 )}
+                </div>
               </div>
             </div>
           </div>
@@ -1504,9 +1602,11 @@ function App() {
         )}
         <section className={[
           "gd-grid",
+          !isResultsPhase ? "tabletop-phase" : "",
           isResultsPhase ? "results-grid" : "",
           phaseRevealVisible ? "phase-ui-hidden" : "phase-ui-visible",
         ].filter(Boolean).join(" ")}>
+          <div className={isResultsPhase ? "results-surface" : "tabletop-surface"}>
           <div className="gd-main">
             {isResultsPhase ? (
               <ResultsPhase
@@ -1522,19 +1622,26 @@ function App() {
                 nextRoomCode={nextRoomCode}
                 onJoinNextRoom={joinNextRoom}
               />
+            ) : activeStation === "phase" ? (
+              <PhaseStation phase={phase} scenario={scenario} shared={shared} phaseIndex={phaseIndex} />
+            ) : activeStation === "telegram" ? (
+              <TelegramInbox notices={telegramArchive} />
+            ) : activeStation === "news" ? (
+              <div className="tabletop-scene news-scene">
+                <span className="scene-label">2 · News & Town Hall</span>
+                <span className="scene-sound">Host · newspaper thump · Player · town notice</span>
+                {activePlayer && <PlayerFamilyLedger family={activePlayer} />}
+                <NewsTownHall
+                  phase={phase}
+                  shared={shared}
+                  playerCount={activeRoundPlayers.length || players.length}
+                />
+              </div>
             ) : (
-              <>
-                <div className="gd-market">
-                  <p className="gd-kicker">Market Conditions - {phase.years}</p>
-                  <img src={asset(phase.image)} alt={phase.title} />
-                  <p>{phase.summary}</p>
-                </div>
-
-                <div className="gd-news">
-                  <p className="gd-kicker">Public News</p>
-                  {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
-                </div>
-
+              <div className="tabletop-scene decision-scene">
+                <span className="scene-label">3 · Make a decision</span>
+                <span className="scene-sound">Player sound · ink stamp</span>
+                {activePlayer && <PlayerFamilyLedger family={activePlayer} />}
                 {activePlayer?.gameOver ? (
                   <FamilyGameOver family={activePlayer} />
                 ) : activeChoices.length > 0 && submittedChoices.length > 0 ? (
@@ -1549,11 +1656,11 @@ function App() {
                     <p className="gd-sync">Submitted {submittedCount}/{activeRoundPlayers.length}</p>
                     {view === "host" && <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>Advance now</button>}
                   </div>
-                ) : (
+                ) : activePlayer ? (
                   <div className="gd-choices">
                     <img src={asset("new-deal-choice-background.png")} alt="" />
                     <div className="gd-choice-content">
-                      <p className="gd-kicker">Choose 2 Actions</p>
+                      <p className="gd-kicker">Make a decision · Choose 2 actions</p>
                       {activePlayer?.collapseWarning && (
                         <div className="emergency-choice-banner">
                           <strong>Emergency decision required</strong>
@@ -1586,10 +1693,12 @@ function App() {
                               ].filter(Boolean).join(" ")}
                               onClick={() => toggleChoice(id)}
                               disabled={blockedByWorkRule || blockedBySabotageRule}
+                              aria-pressed={selected.includes(id)}
+                              style={{ "--card-index": index }}
                               title={blockedByWorkRule ? "Choose only one work action this round." : blockedBySabotageRule ? "Choose only one sabotage action this round." : undefined}
                             >
                               {cardArt && <img className="choice-card-art" src={asset(cardArt)} alt="" />}
-                              <span>{String.fromCharCode(65 + index)}</span>
+                              <span className="choice-index">{String.fromCharCode(65 + index)}</span>
                               <strong>{title}</strong>
                               {!!chips.length && (
                                 <div className="choice-effects" aria-label="Action effects">
@@ -1599,6 +1708,9 @@ function App() {
                                 </div>
                               )}
                               <em>{blockedByWorkRule ? "Choose only one work action this round." : blockedBySabotageRule ? "Choose only one sabotage action this round." : detail}</em>
+                              {selected.includes(id) && (
+                                <span className="choice-selection-stamp" aria-hidden="true">Choice made</span>
+                              )}
                             </button>
                           );
                         })}
@@ -1608,15 +1720,22 @@ function App() {
                       </button>
                     </div>
                   </div>
-                )}
-              </>
+                ) : <div className="gd-panel empty-station"><p>Assign a family before opening decisions.</p></div>}
+              </div>
             )}
           </div>
+          </div>
 
-          {!isResultsPhase && <aside className="gd-sidebar">
-            <FamilyCard family={activePlayer} />
-            {activePlayer && <Meters family={activePlayer} />}
-            <ScenarioPanel scenario={scenario} shared={shared} />
+          {!isResultsPhase && (
+            <TabletopStationNav
+              activeStation={activeStation}
+              unreadTelegrams={telegramArchive.filter((notice) => !readTelegramKeys.includes(notice.key)).length}
+              decisionsDisabled={!activePlayer || activeChoices.length === 0}
+              onSelect={openTableStation}
+            />
+          )}
+
+          {!isResultsPhase && <aside className="gd-sidebar tabletop-table-rail">
             {view === "player" && scenario?.hardMode && !activePlayer?.gameOver && (
               <HardModeLeaderboardPanel
                 players={scoredPlayers}
@@ -1624,10 +1743,8 @@ function App() {
                 onShowLeaderboard={() => setLeaderboardVisible(true)}
               />
             )}
-            <CommunityPanel shared={shared} playerCount={activeRoundPlayers.length || players.length} />
-            <PolicyPanel shared={shared} />
             {view === "host" && !isResultsPhase && (
-              <div className="gd-panel">
+              <div className="gd-panel host-table-controls">
                 <p className="gd-kicker">Host Controls</p>
                 <p className="gd-sync">Players {players.length}/{MAX_PLAYERS} - submitted {submittedCount}/{activeRoundPlayers.length}</p>
                 <p className="gd-sync">Phase {Math.min(phaseIndex + 1, phases.length)}/{phases.length} - target 20-25 min</p>
@@ -1737,9 +1854,16 @@ function ScenarioPicker({ selectedScenarioId, onSelect, hardMode = false, onHard
           type="button"
           className={hardMode ? "hard-mode-toggle selected" : "hard-mode-toggle"}
           onClick={() => onHardModeChange(!hardMode)}
+          aria-pressed={hardMode}
         >
-          <strong>{hardMode ? "Hard Mode On" : "Hard Mode Off"}</strong>
-          <span>{hardMode ? "Fewer slots, harsher betrayal, rival sabotage enabled." : "Standard scarcity and no direct rival attacks."}</span>
+          <span className="hard-mode-seal" aria-hidden="true">R</span>
+          <span className="hard-mode-copy">
+            <small>Optional rule set</small>
+            <strong>Competitive Mode</strong>
+            <span>{hardMode ? "Fewer slots, harsher betrayal, and rival sabotage." : "Standard scarcity without direct rival attacks."}</span>
+          </span>
+          <span className="hard-mode-switch" aria-hidden="true"><i /></span>
+          {hardMode && <b className="hard-mode-stamp">Rivalry Active</b>}
         </button>
       )}
     </div>
@@ -1947,6 +2071,133 @@ function HistoricalStandingsPanel({ players }) {
         })}
       </div>
     </div>
+  );
+}
+
+function TabletopStationNav({ activeStation, unreadTelegrams, decisionsDisabled, onSelect }) {
+  const stations = [
+    ["phase", "Phase reveal"],
+    ["news", "News & Town Hall"],
+    ["decisions", "Make a decision"],
+    ["telegram", "Private telegram"],
+  ];
+  return (
+    <nav className="tabletop-station-nav" aria-label="Tabletop stations">
+      {stations.map(([id, label]) => (
+        <button
+          type="button"
+          key={id}
+          className={activeStation === id ? "active" : ""}
+          aria-current={activeStation === id ? "page" : undefined}
+          disabled={id === "decisions" && decisionsDisabled}
+          onClick={() => onSelect(id)}
+        >
+          {label}
+          {id === "telegram" && unreadTelegrams > 0 && <b>{unreadTelegrams}</b>}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function PhaseStation({ phase, scenario, shared, phaseIndex }) {
+  return (
+    <section className="phase-station tabletop-station" aria-label="Current phase">
+      <span className="scene-label">1 · Phase begins</span>
+      <span className="scene-sound">Host sound · paper laid down</span>
+      <div className="phase-station-image">
+        <img src={asset(phase.image)} alt={phase.title} />
+      </div>
+      <div className="phase-stage-copy">
+        <p className="gd-kicker">Phase {phaseIndex + 1} · {phase.years}</p>
+        <h2>{phase.title}</h2>
+        <p>{phase.summary}</p>
+      </div>
+      <div className="phase-condition-strip">
+        {(phase.conditions || []).map(([label, value, tone]) => (
+          <div className={tone || "neutral"} key={label}>
+            <span>{label}</span>
+            <strong>{value}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="phase-table-notes">
+        <ScenarioPanel scenario={scenario} shared={shared} />
+        <PolicyPanel shared={shared} />
+      </div>
+    </section>
+  );
+}
+
+function TelegramInbox({ notices }) {
+  const latest = notices[0];
+  return (
+    <section className="telegram-inbox tabletop-station" aria-label="Private telegram inbox">
+      <span className="scene-label">4 · Private event</span>
+      <span className="scene-sound">Player sound · telegraph bell</span>
+      <article className={`telegram-sheet ${latest ? `telegram-${latest.type}` : ""}`}>
+        <span className="wire">{latest?.kicker || "Private wire"}{latest?.years ? ` · ${latest.years}` : ""}</span>
+        <h2>{latest?.title || "No private telegrams yet."}</h2>
+        <p>{latest?.detail || "Employment notices, family emergencies, hiring results, and rival actions will be filed here."}</p>
+        {notices.length > 1 && <small>{notices.length - 1} earlier telegrams retained in this family record.</small>}
+      </article>
+    </section>
+  );
+}
+
+function PlayerFamilyLedger({ family }) {
+  if (!family) return null;
+  const reputation = family.reputation ?? 50;
+  const meters = [
+    ["Food", family.food],
+    ["Health", family.health],
+    ["Savings", family.savings],
+    ["Debt", family.debt, "debt"],
+    ["Hope", family.hope],
+    ["Education", family.education],
+    ["Stability", family.stability],
+    ["Trust", reputation],
+  ];
+  return (
+    <section className="player-family-ledger" aria-label="Private family ledger">
+      <img src={asset(familyImageFor(family))} alt={`${family.name} family`} />
+      <div className="player-family-identity">
+        <p className="gd-kicker">Private Family Ledger</p>
+        <h2>The {family.name} Family</h2>
+        <span>Background · {family.role}</span>
+      </div>
+      <div className="player-family-objective">
+        <span>Hidden Objective</span>
+        <strong>{family.objectiveTitle || "Keep the family secure"}</strong>
+        <p>{family.objectiveDetail || family.profile}</p>
+      </div>
+      <div className="player-ledger-meters">
+        {meters.map(([label, value, tone]) => (
+          <div className={tone === "debt" ? "ledger-meter debt" : "ledger-meter"} key={label}>
+            <span>{label}</span>
+            <b>{value ?? 0}</b>
+            <i><em style={{ width: `${clamp(value ?? 0)}%` }} /></i>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NewsTownHall({ phase, shared, playerCount, showDecision, onDecision }) {
+  return (
+    <section className="news-town-hall">
+      <div className="gd-news tabletop-news">
+        <p className="gd-kicker">Public News · {phase.years}</p>
+        {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
+      </div>
+      <CommunityPanel shared={shared} playerCount={playerCount} />
+      {showDecision && (
+        <button className="open-decision-button" type="button" onClick={onDecision}>
+          Make a decision
+        </button>
+      )}
+    </section>
   );
 }
 

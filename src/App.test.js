@@ -1,0 +1,204 @@
+import React, { act } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+
+const player = {
+  id: "player-1",
+  name: "Rosen",
+  playerName: "Alex",
+  role: "Main Street shopkeepers",
+  profile: "A family-owned neighborhood shop balancing cash and customer trust.",
+  objectiveTitle: "Keep the shop solvent",
+  objectiveDetail: "Finish with strong savings and community standing.",
+  food: 68,
+  health: 72,
+  savings: 61,
+  debt: 37,
+  hope: 65,
+  education: 58,
+  stability: 70,
+  reputation: 63,
+  choices: {},
+};
+
+const room = {
+  roomCode: "TEST",
+  players: [player],
+  shared: {
+    trust: 55,
+    communityPot: 3,
+    communityNeed: 8,
+    workSlots: 2,
+    reliefSlots: 3,
+    lastRound: "No shared decision has resolved yet.",
+  },
+  scenario: { id: "easy_credit", title: "Easy Credit", detail: "Comfort comes easily." },
+  phaseIndex: 0,
+};
+
+function savedPlayerState() {
+  return {
+    version: "blob-multiplayer-v2",
+    view: "player",
+    roomCode: room.roomCode,
+    players: room.players,
+    shared: room.shared,
+    scenario: room.scenario,
+    phaseIndex: room.phaseIndex,
+    activePlayerId: player.id,
+    playerName: player.playerName,
+  };
+}
+
+describe("staged tabletop experience", () => {
+  let container;
+  let root;
+
+  beforeEach(() => {
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    window.localStorage.clear();
+    window.history.replaceState({}, "", "/");
+    window.scrollTo = jest.fn();
+    window.matchMedia = jest.fn().mockReturnValue({ matches: true });
+    global.fetch = jest.fn(() => new Promise(() => {}));
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    container.remove();
+    jest.restoreAllMocks();
+  });
+
+  test("opens with the warm 1919 family entrance and player action", async () => {
+    await act(async () => root.render(<App />));
+
+    expect(container.querySelector(".gd-home-ledger")).not.toBeNull();
+    expect(container.textContent).toContain("Take your place at the table");
+    expect(container.textContent).toContain("Join as player");
+    expect(container.querySelector('img[src*="homepage-family-1919.png"]')).not.toBeNull();
+  });
+
+  test("uses the approved four-station tabletop for every phase", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify(savedPlayerState()));
+    await act(async () => root.render(<App />));
+
+    expect(container.querySelector(".tabletop-surface")).not.toBeNull();
+    const newsButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("News & Town Hall")
+    );
+    await act(async () => newsButton.click());
+    expect(container.querySelector(".news-scene .player-family-ledger")).not.toBeNull();
+    expect(container.textContent).toContain("Main Street shopkeepers");
+    expect(container.textContent).toContain("Keep the shop solvent");
+    expect(container.querySelector(".tabletop-surface + .tabletop-station-nav")).not.toBeNull();
+    expect(container.querySelectorAll(".tabletop-station-nav button")).toHaveLength(4);
+    expect(container.querySelector(".news-town-hall")).not.toBeNull();
+    expect(container.textContent).toContain("Community pot");
+    expect(container.querySelector(".gd-choice-grid")).toBeNull();
+
+    const decisionButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Make a decision")
+    );
+    expect(decisionButton).toBeDefined();
+    await act(async () => decisionButton.click());
+
+    const choiceButton = container.querySelector(".gd-choice-grid button");
+    expect(choiceButton).not.toBeNull();
+    await act(async () => choiceButton.click());
+    expect(choiceButton.querySelector(".choice-selection-stamp")?.textContent).toContain("Choice made");
+  });
+
+  test("keeps acknowledged private notices in the telegram station", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      telegramArchive: [{
+        key: "player-1-postwar-job-loss",
+        type: "job",
+        kicker: "Private Family Notice",
+        title: "Main job lost",
+        detail: "Your family lost its main job this phase.",
+        phaseId: "postwar",
+        years: "1919-1920",
+      }],
+      readTelegramKeys: ["player-1-postwar-job-loss"],
+    }));
+    await act(async () => root.render(<App />));
+
+    const telegramButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Private telegram")
+    );
+    expect(telegramButton).toBeDefined();
+    await act(async () => telegramButton.click());
+
+    expect(container.querySelector(".telegram-inbox")).not.toBeNull();
+    expect(container.textContent).toContain("Main job lost");
+    expect(container.textContent).toContain("1919-1920");
+  });
+
+  test("exposes a persistent sound control", async () => {
+    await act(async () => root.render(<App />));
+
+    const soundToggle = container.querySelector(".tabletop-sound-toggle");
+    expect(soundToggle).not.toBeNull();
+    expect(soundToggle.getAttribute("aria-label")).toMatch(/sound/i);
+  });
+
+  test("presents hard mode as an accessible rivalry challenge card", async () => {
+    window.history.replaceState({}, "", "/?newHost=1");
+    await act(async () => root.render(<App />));
+
+    const hardMode = container.querySelector(".hard-mode-toggle");
+    expect(hardMode).not.toBeNull();
+    expect(hardMode.textContent).toContain("Competitive Mode");
+    expect(hardMode.getAttribute("aria-pressed")).toBe("false");
+    expect(hardMode.querySelector(".hard-mode-switch")).not.toBeNull();
+
+    await act(async () => hardMode.click());
+    expect(hardMode.getAttribute("aria-pressed")).toBe("true");
+    expect(hardMode.textContent).toContain("Rivalry Active");
+  });
+
+  test("shows Town Hall only once on the host table", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      view: "host",
+      hostToken: "host-test-token",
+      activePlayerId: "",
+    }));
+    await act(async () => root.render(<App />));
+
+    const newsButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("News & Town Hall")
+    );
+    await act(async () => newsButton.click());
+    expect(container.querySelectorAll(".community-panel")).toHaveLength(1);
+  });
+
+  test("lets a host with an assigned family open decisions on the tabletop", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      view: "host",
+      hostToken: "host-test-token",
+      activePlayerId: player.id,
+    }));
+    await act(async () => root.render(<App />));
+
+    expect(container.querySelector(".tabletop-phase")).not.toBeNull();
+    const newsButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("News & Town Hall")
+    );
+    await act(async () => newsButton.click());
+    expect(container.querySelector(".news-scene .player-family-ledger")).not.toBeNull();
+    expect(container.querySelector(".tabletop-phase > .tabletop-table-rail")).not.toBeNull();
+    const decisionButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Make a decision")
+    );
+    expect(decisionButton).toBeDefined();
+
+    await act(async () => decisionButton.click());
+    expect(container.querySelector(".gd-choice-grid")).not.toBeNull();
+  });
+});
