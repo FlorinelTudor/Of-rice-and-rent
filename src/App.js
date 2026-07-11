@@ -1151,7 +1151,6 @@ function App() {
   const isRecoveryPhase = phase.id === "recovery";
   const previousPhaseId = phases[phaseIndex - 1]?.id;
   const activePlayer = players.find((p) => p.id === activePlayerId) || players[0];
-  const rivalPlayer = activePlayer?.rivalId ? players.find((p) => p.id === activePlayer.rivalId) : null;
   const activeRoundPlayers = players.filter((p) => !p.gameOver);
   const submittedChoices = activePlayer?.choices?.[phase.id] || [];
   const submittedCount = activeRoundPlayers.filter((p) => p.choices?.[phase.id]?.length === 2).length;
@@ -1798,7 +1797,6 @@ function App() {
                           activePlayer={activePlayer}
                           players={players}
                           phase={phase}
-                          rivalPlayer={rivalPlayer}
                           isBusy={isBusy}
                           onChooseRival={chooseRival}
                         />
@@ -2097,35 +2095,34 @@ function ScenarioPicker({ selectedScenarioId, onSelect, hardMode = false, onHard
   );
 }
 
-function RivalPanel({ activePlayer, players, phase, rivalPlayer, isBusy, onChooseRival }) {
+function RivalPanel({ activePlayer, players, phase, isBusy, onChooseRival }) {
   const tokens = activePlayer.rivalTokensRemaining ?? 0;
   const inWindow = RIVAL_WINDOW_PHASES.has(phase.id);
   const usedThisPhase = (activePlayer.rivalChoicePhases || []).includes(phase.id);
   const canChoose = inWindow && tokens > 0 && !usedThisPhase;
   const candidates = players.filter((player) => player.id !== activePlayer.id && !player.gameOver);
+  if (!canChoose) return null;
   return (
     <div className="rival-panel">
-      <div>
-        <p className="gd-kicker">Hard Mode Rivalry</p>
-        <h3>{rivalPlayer ? `Rival: ${rivalPlayer.playerName || "Player"} (${rivalPlayer.name})` : "Choose a rival family"}</h3>
+      <div className="rival-heading">
+        <div>
+          <p className="gd-kicker">Confidential Rival Dossier</p>
+          <h3>Name a rival family</h3>
+        </div>
+        <span className="rival-token-count">{tokens} token{tokens === 1 ? "" : "s"} left</span>
         <p>
-          {canChoose
-            ? `Use one rival token now. Tokens left: ${tokens}.`
-            : rivalPlayer
-              ? `Sabotage cards target this family. Rival tokens left: ${tokens}.`
-              : "Rival nominations open during the speculation and deepening phases."}
+          Choose carefully. Your nomination unlocks sabotage cards for this family.
         </p>
       </div>
-      {canChoose && (
-        <div className="rival-list">
-          {candidates.map((player) => (
-            <button key={player.id} type="button" onClick={() => onChooseRival(player.id)} disabled={isBusy}>
-              <strong>{player.playerName || "Player"}</strong>
-              <span>{player.name} Family · Score {scoreFamily(player)}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="rival-list">
+        {candidates.map((player) => (
+          <button key={player.id} type="button" onClick={() => onChooseRival(player.id)} disabled={isBusy}>
+            <strong>The {player.name} Family</strong>
+            <span>{player.playerName || "Player"} · Score {scoreFamily(player)}</span>
+            <i>Nominate</i>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
