@@ -111,6 +111,7 @@ describe("staged tabletop experience", () => {
     expect(choiceGrid.dataset.choiceCount).toBe(String(choiceGrid.querySelectorAll("button").length));
     expect(choiceGrid.classList.contains("choice-layout-standard")).toBe(true);
     expect(choiceGrid.querySelectorAll("button").length).toBeGreaterThanOrEqual(7);
+    expect(choiceGrid.querySelectorAll("em")).toHaveLength(0);
     await act(async () => choiceButton.click());
     expect(choiceButton.querySelector(".choice-selection-stamp")?.textContent).toContain("Choice made");
   });
@@ -293,6 +294,12 @@ describe("staged tabletop experience", () => {
     expect(container.querySelector(".policy-vote-modal")).not.toBeNull();
     expect(container.textContent).toContain("Secret vote");
     expect(container.textContent).toContain("Historical status quo");
+    expect(container.querySelector(".policy-ballot-art")).not.toBeNull();
+    expect(container.querySelectorAll(".policy-option")).toHaveLength(2);
+    expect(container.querySelector(".policy-submit").disabled).toBe(true);
+    await act(async () => container.querySelectorAll(".policy-option")[0].click());
+    expect(container.querySelector(".policy-submit").disabled).toBe(false);
+    expect(container.textContent).toContain("Submit secret vote");
     jest.useRealTimers();
   });
 

@@ -1,6 +1,6 @@
 import "@/App.css";
 import { Component, useEffect, useMemo, useRef, useState } from "react";
-import { playTabletopSound } from "@/tabletopSound";
+import { playTabletopSound, stopTabletopSounds } from "@/tabletopSound";
 
 const asset = (name) => `${process.env.PUBLIC_URL || ""}/depression-game/${name}`;
 const MAX_PLAYERS = 8;
@@ -1109,6 +1109,7 @@ function App() {
   const [dismissedPolicyKeys, setDismissedPolicyKeys] = useState(savedGame.dismissedPolicyKeys || []);
   const [dismissedReceiptKeys, setDismissedReceiptKeys] = useState(savedGame.dismissedReceiptKeys || []);
   const [leaderboardVisible, setLeaderboardVisible] = useState(false);
+  const [policySelection, setPolicySelection] = useState("");
   const viewRef = useRef(savedGame.view || "start");
   const lastNoticeSoundRef = useRef("");
   const tableSetSoundRef = useRef("");
@@ -1126,6 +1127,7 @@ function App() {
   const submittedCount = activeRoundPlayers.filter((p) => p.choices?.[phase.id]?.length === 2).length;
   const policyVote = shared?.policyVote || null;
   const activePolicyKey = policyVote?.resolved ? `${policyVote.id}-${policyVote.result?.winnerId}` : "";
+  const submittedPolicyOption = activePlayer?.policyVotes?.[phase.id] || "";
   const activeChoices = useMemo(() => {
     if (activePlayer?.gameOver) return [];
     if (!phase.choices.length) return phase.choices;
@@ -1204,6 +1206,10 @@ function App() {
     policyVote && !phaseRevealVisible && !activeReceipt && !activePrivateNotice &&
     (!policyVote.resolved || !dismissedPolicyKeys.includes(activePolicyKey))
   );
+
+  useEffect(() => {
+    setPolicySelection(submittedPolicyOption);
+  }, [phase.id, submittedPolicyOption]);
 
   useEffect(() => {
     viewRef.current = view;
@@ -1292,7 +1298,7 @@ function App() {
       tableSetSoundRef.current === phase.id
     ) return;
     tableSetSoundRef.current = phase.id;
-    playTabletopSound("newspaper", { enabled: true, volume: view === "host" ? 0.8 : 0.38 });
+    playTabletopSound("newspaper", { enabled: soundEnabled, volume: view === "host" ? 0.8 : 0.38 });
   }, [isResultsPhase, phase.id, phaseRevealVisible, soundEnabled, view]);
 
   function syncRoom(room) {
@@ -1485,7 +1491,11 @@ function App() {
   function toggleSound() {
     const nextValue = !soundEnabled;
     setSoundEnabled(nextValue);
-    if (nextValue) playTabletopSound("stamp", { enabled: true, volume: 0.35 });
+    if (!nextValue) {
+      stopTabletopSounds();
+      return;
+    }
+    playTabletopSound("stamp", { enabled: true, volume: 0.35 });
   }
 
   async function chooseRival(rivalId) {
@@ -1513,8 +1523,8 @@ function App() {
     setSelected([]);
   }
 
-  async function submitPolicyVote(optionId) {
-    if (!activePlayer || !policyVote || policyVote.resolved) return;
+  async function submitPolicyVote(optionId = policySelection) {
+    if (!activePlayer || !policyVote || policyVote.resolved || !optionId || submittedPolicyOption) return;
     playTabletopSound("gavel", { enabled: soundEnabled, volume: 0.5 });
     const data = await runGameRequest(() =>
       gameApi(`/game/rooms/${roomCode}/policy-vote`, {
@@ -1579,9 +1589,11 @@ function App() {
         <PolicyVoteModal
           policy={policyVote}
           view={view}
-          selectedOptionId={activePlayer?.policyVotes?.[phase.id]}
+          selectedOptionId={policySelection}
+          submittedOptionId={submittedPolicyOption}
           isBusy={isBusy}
-          onVote={submitPolicyVote}
+          onSelect={setPolicySelection}
+          onVote={() => submitPolicyVote()}
           onDismiss={() => {
             if (activePolicyKey) setDismissedPolicyKeys((current) => [...new Set([...current, activePolicyKey])]);
           }}
@@ -1785,7 +1797,6 @@ function App() {
                                   ))}
                                 </div>
                               )}
-                              <em>{blockedByWorkRule ? "Choose only one work action this round." : blockedBySabotageRule ? "Choose only one sabotage action this round." : detail}</em>
                               {selected.includes(id) && (
                                 <span className="choice-selection-stamp" aria-hidden="true">Choice made</span>
                               )}
@@ -1926,11 +1937,12 @@ function OutcomeReceiptModal({ receipt, onDismiss }) {
   );
 }
 
-function PolicyVoteModal({ policy, view, selectedOptionId, isBusy, onVote, onDismiss }) {
+function PolicyVoteModal({ policy, view, selectedOptionId, submittedOptionId, isBusy, onSelect, onVote, onDismiss }) {
   const winner = policy.options.find((option) => option.id === policy.result?.winnerId);
   return (
     <div className="private-notice-backdrop policy-vote-backdrop" role="presentation">
       <section className="policy-vote-modal" role="dialog" aria-modal="true" aria-labelledby="policy-vote-title">
+        <img className="policy-ballot-art" src={asset("public-policy-ballot.png")} alt="" />
         <div className="policy-ballot-heading">
           <p className="gd-kicker">Public Policy Ballot</p>
           <span className="policy-secret-stamp">Secret vote</span>
@@ -1951,24 +1963,25 @@ function PolicyVoteModal({ policy, view, selectedOptionId, isBusy, onVote, onDis
             </div>
             <button onClick={onDismiss}>Continue to family decisions</button>
           </>
-        ) : selectedOptionId || view === "host" ? (
+        ) : submittedOptionId || view === "host" ? (
           <div className="policy-waiting">
             <div className="policy-sealed-ballot">Ballot sealed</div>
             <h3>{policy.votesReceived}/{policy.eligibleCount} families have voted</h3>
-            <p>Votes remain anonymous until every active family has answered. Submission speed gives no advantage.</p>
+            <p>{view === "host" ? "The host does not vote. Each player family must cast its ballot from that player’s screen." : "Your vote is recorded. Votes remain anonymous until every active family has answered."}</p>
           </div>
         ) : (
           <>
             <p>{policy.detail}</p>
             <div className="policy-option-grid">
               {policy.options.map((option) => (
-                <button key={option.id} className="policy-option" onClick={() => onVote(option.id)} disabled={isBusy}>
+                <button key={option.id} className={`policy-option ${selectedOptionId === option.id ? "selected" : ""}`} onClick={() => onSelect(option.id)} disabled={isBusy} aria-pressed={selectedOptionId === option.id}>
                   <span>{option.historical || "Alternative proposal"}</span>
                   <strong>{option.title}</strong>
                   <p>{option.detail}</p>
                 </button>
               ))}
             </div>
+            <button className="policy-submit" onClick={onVote} disabled={!selectedOptionId || isBusy}>Submit secret vote</button>
           </>
         )}
       </section>

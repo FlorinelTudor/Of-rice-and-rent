@@ -1741,11 +1741,23 @@
 .policy-vote-modal {
   width: min(760px, 100%);
   padding: 28px;
+  overflow: hidden;
   border: 8px solid #ead9b8;
   background: #f8eed9;
   color: #30291f;
   box-shadow: 0 30px 80px rgba(24, 15, 7, .48);
   animation: notice-pop .24s ease-out;
+}
+
+.policy-ballot-art {
+  display: block;
+  width: 100%;
+  max-height: 210px;
+  margin: -4px 0 18px;
+  border: 1px solid #b7a27d;
+  object-fit: cover;
+  object-position: center 32%;
+  filter: sepia(.16) saturate(.8);
 }
 
 .policy-ballot-heading,
@@ -1780,6 +1792,8 @@
 .policy-option strong { display: block; margin: 10px 0; font-family: Georgia, serif; font-size: 24px; }
 .policy-option p { margin: 0; line-height: 1.45; }
 .policy-option:hover { border-color: #355b42; background: #edf4eb; transform: translateY(-2px); }
+.policy-option.selected { border-color: #3e604b; background: #e3efe6; box-shadow: inset 0 0 0 3px #3e604b; }
+.policy-submit { width: 100%; margin-top: 16px; background: #3e604b; border-color: #3e604b; }
 .policy-waiting, .policy-result-sheet { margin-top: 18px; padding: 24px; border: 1px solid #b9a27b; background: rgba(255, 251, 240, .72); text-align: center; }
 .policy-sealed-ballot { width: 110px; margin: 0 auto 16px; padding: 30px 10px; border: 2px solid #6f5736; background: #d9c39e; font-weight: 900; text-transform: uppercase; transform: rotate(-2deg); }
 .policy-tally { margin: 18px 0; justify-content: center; flex-wrap: wrap; }
@@ -3328,6 +3342,27 @@
   animation: ledgerLand .55s ease-out both;
 }
 
+.tabletop-surface .decision-scene .rival-panel {
+  position: absolute;
+  z-index: 9;
+  top: 20px;
+  right: 22px;
+  left: 22px;
+  min-height: 0;
+  margin: 0;
+  padding: 11px 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-width: 2px;
+  border-radius: 0;
+  background: rgba(63, 20, 16, .96);
+  box-shadow: 0 10px 22px rgba(31, 12, 8, .35);
+}
+
+.tabletop-surface .decision-scene .rival-panel h3 { font-size: 20px; }
+.tabletop-surface .decision-scene .rival-panel p { font-size: 12px; }
+.tabletop-surface .decision-scene .rival-panel .rival-list { max-width: 410px; }
+
 .tabletop-surface .player-family-ledger::after {
   content: "PRIVATE FAMILY LEDGER";
   position: absolute;
@@ -3408,15 +3443,17 @@
 .tabletop-surface .community-panel {
   position: absolute;
   z-index: 4;
-  top: 34%;
+  top: 224px;
+  bottom: 26px;
   right: 4%;
   width: 32%;
-  min-height: 385px;
+  min-height: 0;
   padding: 22px;
   border: 7px solid #f4e8d2;
   border-radius: 0;
   background: #f4e8d2;
   box-shadow: 0 16px 28px rgba(29, 17, 6, .38);
+  overflow: auto;
   transform: rotate(1deg);
   animation: mockTownIn .7s .35s cubic-bezier(.2, .85, .25, 1.05) both;
 }
@@ -3460,7 +3497,7 @@
 .tabletop-surface .gd-choice-grid button {
   display: grid;
   grid-template-columns: 1fr;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -3475,7 +3512,8 @@
 
 .tabletop-surface .choice-card-art {
   width: 100%;
-  height: 78px;
+  height: 100%;
+  min-height: 0;
   margin: 0;
   aspect-ratio: auto;
   border: 0;
@@ -3485,32 +3523,20 @@
 .tabletop-surface .gd-choice-grid button strong { padding: 7px 8px 3px; font: 16px/1 "Source Serif 4", Georgia, serif; }
 .tabletop-surface .choice-effects { grid-column: 1; gap: 3px; padding: 0 8px; }
 .tabletop-surface .choice-effects .effect-chip { min-height: 17px; padding: 2px 5px; font-size: 9px; }
-.tabletop-surface .gd-choice-grid button em {
-  grid-column: 1;
-  display: -webkit-box;
-  overflow: hidden;
-  padding: 1px 8px 7px;
-  font-size: 10px;
-  line-height: 1.2;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
 .tabletop-surface .choice-selection-stamp { top: 42px; right: 8px; width: 62px; height: 62px; border-width: 3px; font-size: 9px; }
 .tabletop-surface .gd-submit { position: absolute; z-index: 10; right: 28px; bottom: 18px; border-radius: 0; }
 
-.tabletop-surface .choice-layout-wide .choice-card-art { height: 245px; }
+.tabletop-surface .choice-layout-wide .choice-card-art { height: 100%; }
 .tabletop-surface .choice-layout-wide button strong { padding: 12px 12px 6px; font-size: 20px; }
 .tabletop-surface .choice-layout-wide .choice-effects { padding-inline: 12px; }
-.tabletop-surface .choice-layout-wide button em { padding: 0 12px 14px; font-size: 11px; }
 .tabletop-surface .choice-layout-wide .choice-selection-stamp { top: 180px; width: 88px; height: 88px; font-size: 12px; }
 
 .tabletop-surface .choice-layout-dense { gap: 7px; }
-.tabletop-surface .choice-layout-dense .choice-card-art { height: 44px; }
+.tabletop-surface .choice-layout-dense .choice-card-art { height: 100%; }
 .tabletop-surface .choice-layout-dense button { border-width: 4px; }
 .tabletop-surface .choice-layout-dense button strong { padding: 4px 6px 2px; font-size: 13px; }
 .tabletop-surface .choice-layout-dense .choice-effects { padding-inline: 6px; }
 .tabletop-surface .choice-layout-dense .effect-chip { font-size: 8px; }
-.tabletop-surface .choice-layout-dense button em { display: none; }
 .tabletop-surface .choice-layout-dense .choice-selection-stamp { top: 24px; width: 46px; height: 46px; font-size: 7px; }
 
 .tabletop-surface .telegram-inbox { display: grid; place-items: center; }

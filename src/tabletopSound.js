@@ -95,3 +95,10 @@ export function playTabletopSound(cue, { enabled = true, volume = 1 } = {}) {
   });
   return true;
 }
+
+export function stopTabletopSounds() {
+  const context = audioContext || contextForPlayback();
+  if (!context) return false;
+  if (context.state !== "suspended") context.suspend().catch(() => {});
+  return true;
+}
