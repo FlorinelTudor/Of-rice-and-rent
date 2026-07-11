@@ -112,8 +112,22 @@ describe("staged tabletop experience", () => {
     expect(choiceGrid.classList.contains("choice-layout-standard")).toBe(true);
     expect(choiceGrid.querySelectorAll("button").length).toBeGreaterThanOrEqual(7);
     expect(choiceGrid.querySelectorAll("em")).toHaveLength(0);
+    expect(choiceButton.textContent).toMatch(/\+ Food \d+/);
     await act(async () => choiceButton.click());
     expect(choiceButton.querySelector(".choice-selection-stamp")?.textContent).toContain("Choice made");
+  });
+
+  test("keeps the town record available without crowding the scarcity board", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify(savedPlayerState()));
+    await act(async () => root.render(<App />));
+
+    const newsButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("News & Town Hall")
+    );
+    await act(async () => newsButton.click());
+
+    expect(container.querySelector(".community-record")).not.toBeNull();
+    expect(container.querySelector(".community-record summary")?.textContent).toContain("Town record");
   });
 
   test("shows choice consequences before a repeated action is locked in", async () => {
@@ -300,6 +314,42 @@ describe("staged tabletop experience", () => {
     await act(async () => container.querySelectorAll(".policy-option")[0].click());
     expect(container.querySelector(".policy-submit").disabled).toBe(false);
     expect(container.textContent).toContain("Submit secret vote");
+    jest.useRealTimers();
+  });
+
+  test("lets a host resolve ballots for built-in demo families", async () => {
+    jest.useFakeTimers();
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      view: "host",
+      hostToken: "host-test-token",
+      phaseIndex: 6,
+      shared: {
+        ...room.shared,
+        policyVote: {
+          id: "banking_crisis_vote",
+          phaseId: "bank_holiday",
+          title: "How should Washington answer the banking crisis?",
+          detail: "Every family votes in secret.",
+          votesReceived: 0,
+          eligibleCount: 8,
+          demoVotesRemaining: 8,
+          resolved: false,
+          options: [
+            { id: "bank_stabilization", title: "Stabilize the banks", detail: "Reopen sound banks.", historical: "Historical status quo" },
+            { id: "household_assistance", title: "Emergency household aid", detail: "Fund food and medicine." },
+          ],
+        },
+      },
+    }));
+    await act(async () => root.render(<App />));
+    await act(async () => jest.advanceTimersByTime(351));
+
+    expect(container.textContent).toContain("Record demo ballots");
+    expect(container.querySelectorAll(".policy-option")).toHaveLength(2);
+    expect(container.querySelector(".policy-submit").disabled).toBe(true);
+    await act(async () => container.querySelectorAll(".policy-option")[0].click());
+    expect(container.querySelector(".policy-submit").disabled).toBe(false);
     jest.useRealTimers();
   });
 

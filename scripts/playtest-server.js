@@ -744,6 +744,9 @@ function applyUnemploymentShock(room, phaseId) {
 }
 
 function applyPhaseEntryEvents(room, phaseId) {
+  if (typeof room.shared?.activePolicy?.expiresAfterPhaseIndex === "number" && room.phase_index > room.shared.activePolicy.expiresAfterPhaseIndex) {
+    room.shared = { ...(room.shared || {}), activePolicy: null };
+  }
   room.entry_events = room.entry_events || {};
   if (room.entry_events[phaseId]) return;
   const policyVote = policyVoteForPhase(phaseId);
@@ -803,6 +806,7 @@ function sharedSnapshot(room, phaseId) {
       options: policy.options.map(({ id, title, detail, historical }) => ({ id, title, detail, historical })),
       votesReceived: policyState?.result?.votesReceived || Object.keys(policyState?.votes || {}).length,
       eligibleCount: policyState?.result?.eligibleCount || room.players.filter((player) => !player.gameOver).length,
+      demoVotesRemaining: room.players.filter((player) => player.isDemo && !player.gameOver && !policyState?.votes?.[player.id]).length,
       resolved: Boolean(policyState?.result?.resolved),
       result: policyState?.result || null,
     } : null,
@@ -1029,6 +1033,7 @@ app.post("/api/game/rooms/:roomCode/join", (req, res) => {
     return;
   }
   const player = pickFamily(String(req.body.player_name || "Player").trim() || "Player", room.players.length, clientId, room.test_family_overrides);
+  player.isDemo = Boolean(req.body.is_demo);
   room.players.push(player);
   applyCollapseChecks(room, PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)], { allowGameOver: false });
   room.updated_at = new Date().toISOString();
@@ -1070,7 +1075,51 @@ app.post("/api/game/rooms/:roomCode/policy-vote", (req, res) => {
         title: winningOption.title,
         detail: state.result.tied ? `${winningOption.detail} The vote tied, so the historical status quo prevailed.` : winningOption.detail,
         phaseId,
+        expiresAfterPhaseIndex: Math.min(PHASE_IDS.length - 2, room.phase_index + 2),
       },
+    };
+    state.applied = true;
+    applyCollapseChecks(room, phaseId, { allowGameOver: false });
+  }
+  room.updated_at = new Date().toISOString();
+  res.json({ room: publicRoom(room) });
+});
+
+app.post("/api/game/rooms/:roomCode/policy-demo-votes", (req, res) => {
+  const room = getRoom(req, res);
+  if (!room) return;
+  if (!req.body.host_token || req.body.host_token !== room.host_token) {
+    res.status(403).json({ detail: "Only the host can record demo ballots." });
+    return;
+  }
+  const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
+  const policy = policyVoteForPhase(phaseId);
+  const option = policy?.options.find((candidate) => candidate.id === req.body.option_id);
+  if (!policy || !option) {
+    res.status(400).json({ detail: "This policy vote is not available." });
+    return;
+  }
+  room.policy_votes = room.policy_votes || {};
+  const state = room.policy_votes[phaseId] || { votes: {}, result: null };
+  if (!state.result?.resolved) {
+    room.players.filter((player) => player.isDemo && !player.gameOver).forEach((player) => {
+      if (state.votes[player.id]) return;
+      state.votes[player.id] = option.id;
+      player.policyVotes = { ...(player.policyVotes || {}), [phaseId]: option.id };
+    });
+  }
+  const eligibleIds = room.players.filter((player) => !player.gameOver).map((player) => player.id);
+  state.result = resolvePolicyVote(policy, state.votes, eligibleIds);
+  room.policy_votes[phaseId] = state;
+  if (state.result.resolved && !state.applied) {
+    room.players = room.players.map((player) => {
+      if (player.gameOver) return player;
+      const impacted = applySharedImpact(player, policyImpactForPlayer(policy, state.result.winnerId, player));
+      return addPolicyHistory(impacted, { id: policy.id, title: option.title, phaseId });
+    });
+    room.shared = {
+      ...(room.shared || {}),
+      activePolicy: { id: policy.id, title: option.title, detail: state.result.tied ? `${option.detail} The vote tied, so the historical status quo prevailed.` : option.detail, phaseId, expiresAfterPhaseIndex: Math.min(PHASE_IDS.length - 2, room.phase_index + 2) },
     };
     state.applied = true;
     applyCollapseChecks(room, phaseId, { allowGameOver: false });

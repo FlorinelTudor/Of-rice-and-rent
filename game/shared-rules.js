@@ -1,4 +1,30 @@
 const POLICY_VOTES = {
+  deepening: {
+    id: "relief_and_recovery_vote",
+    phaseId: "deepening",
+    title: "Should Washington lean on loans or direct relief?",
+    detail: "Every family votes in secret. A tie preserves the historical policy.",
+    statusQuoId: "reconstruction_loans",
+    options: [
+      {
+        id: "reconstruction_loans",
+        title: "Back reconstruction loans",
+        detail: "Channel federal support through banks, railroads, and public works lenders to restart investment.",
+        historical: "Historical status quo",
+        impact: { bankTrust: 12, stability: 4, savings: 2, hope: -2 },
+        favoredRoles: ["Main Street merchants", "Industrial wage earners", "Rail and transport workers", "Mining household"],
+        favoredImpact: { savings: 3, stability: 2 },
+      },
+      {
+        id: "direct_federal_relief",
+        title: "Send direct federal relief",
+        detail: "Put food, rent, and emergency household support ahead of financial reconstruction.",
+        impact: { food: 9, health: 5, hope: 6, bankTrust: -4, stability: -2 },
+        favoredRoles: ["Rural tenant farmers", "Urban service workers", "Migrant farm workers", "Urban garment workers", "New arrival workers"],
+        favoredImpact: { food: 3, health: 2 },
+      },
+    ],
+  },
   bank_holiday: {
     id: "banking_crisis_vote",
     phaseId: "bank_holiday",
@@ -48,6 +74,32 @@ const POLICY_VOTES = {
         impact: { food: 10, health: 5, hope: 5, savings: 2 },
         favoredRoles: ["Rural tenant farmers", "Urban service workers", "Migrant farm workers", "Urban garment workers"],
         favoredImpact: { food: 3, health: 2 },
+      },
+    ],
+  },
+  second: {
+    id: "recovery_strategy_vote",
+    phaseId: "second",
+    title: "Should Washington pull back or sustain recovery spending?",
+    detail: "Every family votes in secret. A tie preserves the historical policy.",
+    statusQuoId: "fiscal_retrenchment",
+    options: [
+      {
+        id: "fiscal_retrenchment",
+        title: "Balance the federal budget",
+        detail: "Reduce deficits and tighten spending to restore confidence in public finances.",
+        historical: "Historical status quo",
+        impact: { bankTrust: 9, savings: -3, hope: -5, stability: -4 },
+        favoredRoles: ["Main Street merchants", "Rail and transport workers"],
+        favoredImpact: { bankTrust: 3, stability: 1 },
+      },
+      {
+        id: "sustain_recovery_spending",
+        title: "Sustain recovery spending",
+        detail: "Keep relief and public investment moving until jobs and demand hold on their own.",
+        impact: { savings: 6, food: 3, hope: 7, stability: 4, bankTrust: -2 },
+        favoredRoles: ["Industrial wage earners", "Urban service workers", "Urban garment workers", "Migrant farm workers", "New arrival workers"],
+        favoredImpact: { savings: 3, hope: 2 },
       },
     ],
   },

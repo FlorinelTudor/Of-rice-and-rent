@@ -1,5 +1,6 @@
 const {
   MIN_THINKING_TIME_MS,
+  POLICY_VOTES,
   antiGamingMultiplier,
   communityOutcomeFor,
   consequenceWarningsFor,
@@ -10,6 +11,16 @@ const {
 } = require("../game/shared-rules");
 
 describe("shared multiplayer rules", () => {
+  test("spaces five national policy ballots across the campaign", () => {
+    expect(Object.keys(POLICY_VOTES)).toEqual([
+      "deepening",
+      "bank_holiday",
+      "work_relief",
+      "second",
+      "defense_shift",
+    ]);
+  });
+
   test("uses the historical status quo when a policy vote ties", () => {
     const policy = policyVoteForPhase("bank_holiday");
     const result = resolvePolicyVote(policy, {

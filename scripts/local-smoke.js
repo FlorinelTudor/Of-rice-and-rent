@@ -16,8 +16,10 @@ const phaseChoices = [
 ];
 
 const policyOptions = {
+  deepening: ["reconstruction_loans", "direct_federal_relief"],
   bank_holiday: ["bank_stabilization", "household_assistance"],
   work_relief: ["public_works", "direct_relief"],
+  second: ["fiscal_retrenchment", "sustain_recovery_spending"],
   defense_shift: ["defense_contracts", "civilian_recovery"],
 };
 
@@ -26,12 +28,12 @@ async function completePolicyVote(baseUrl, roomCode, state, { tie = false } = {}
   if (!policy || policy.resolved) return state;
   const options = policyOptions[policy.phaseId];
   const activePlayers = state.room.players.filter((player) => !player.gameOver);
-  await Promise.all(activePlayers.map((player, index) =>
-    request(baseUrl, `/rooms/${roomCode}/policy-vote`, {
+  for (const [index, player] of activePlayers.entries()) {
+    await request(baseUrl, `/rooms/${roomCode}/policy-vote`, {
       method: "POST",
       body: JSON.stringify({ player_id: player.id, option_id: tie ? options[index % 2] : options[0] }),
-    })
-  ));
+    });
+  }
   const next = await request(baseUrl, `/rooms/${roomCode}`);
   if (!next.room.shared.policyVote?.resolved) throw new Error(`Expected ${policy.phaseId} policy vote to resolve.`);
   if (tie && activePlayers.length % 2 === 0 && next.room.shared.policyVote.result.winnerId !== options[0]) {

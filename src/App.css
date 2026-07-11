@@ -3466,6 +3466,13 @@
 .tabletop-surface .community-stats { gap: 8px; }
 .tabletop-surface .community-stats > div { padding: 11px; border-radius: 0; }
 .tabletop-surface .community-last { font-size: 11px; }
+.tabletop-surface .community-record { margin-top: 12px; border-top: 1px dashed #b79a6b; }
+.tabletop-surface .community-record summary { padding: 9px 0 3px; color: #5d4a31; cursor: pointer; font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.tabletop-surface .community-record .community-thresholds { margin-top: 5px; }
+.tabletop-surface .community-record .community-last { margin-bottom: 0; }
+.tabletop-surface .phase-lesson { display: block; margin-top: 9px; color: #6d5434; font: 700 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .04em; }
+.policy-in-force { display: block; margin-top: 9px; color: #355b42; font-weight: 700; }
+.family-outcome { display: block; margin-top: 3px; color: #5f503e; line-height: 1.35; }
 
 .tabletop-surface .decision-scene .gd-choices {
   position: absolute;
@@ -3561,6 +3568,7 @@
 
 .tabletop-phase > .tabletop-station-nav {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 9px;
   margin-top: 14px;
@@ -3568,6 +3576,16 @@
   border: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.table-rhythm {
+  flex: 0 0 100%;
+  margin-bottom: 2px;
+  color: #68543a;
+  font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .08em;
+  text-align: center;
+  text-transform: uppercase;
 }
 
 .gd-app .tabletop-phase > .tabletop-station-nav button {

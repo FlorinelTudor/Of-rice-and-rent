@@ -4,6 +4,19 @@ import { playTabletopSound, stopTabletopSounds } from "@/tabletopSound";
 
 const asset = (name) => `${process.env.PUBLIC_URL || ""}/depression-game/${name}`;
 const MAX_PLAYERS = 8;
+const PHASE_LESSONS = {
+  postwar: "Work and prices can be unstable long before a national crisis arrives.",
+  recession_1921: "Cash cushions matter when hours disappear.",
+  early_boom: "Easy credit can create both comfort and fragility.",
+  speculation: "Prosperity rewards exposure before it reveals its risks.",
+  crash: "Protecting your own liquidity can still weaken collective trust.",
+  deepening: "When scarcity spreads, household survival and public policy become inseparable.",
+  bank_holiday: "Restoring institutions helps, but recovery reaches families unevenly.",
+  work_relief: "The form of relief changes who gets a foothold.",
+  second: "Pulling back too early can turn a recovery into another downturn.",
+  defense_shift: "New demand creates opportunity, but never for every household at once.",
+  recovery: "The resources a family protected shape what recovery feels like.",
+};
 const GAME_STATE_VERSION = "blob-multiplayer-v2";
 const COOPERATIVE_CHOICES = new Set(["join_mutual_aid", "organize_neighbors", "support_union", "sponsor_neighbor", "contribute_community_pot", "shopkeeper_extend_credit"]);
 const SABOTAGE_CHOICE_IDS = ["rival_undercut_work", "rival_spread_bank_rumors", "rival_call_in_debt", "rival_block_relief"];
@@ -737,6 +750,23 @@ function scoreBreakdown(family) {
   return parts.join(" · ");
 }
 
+function familyOutcomeSummary(family) {
+  const strengths = ["food", "health", "savings", "hope", "education", "stability"]
+    .map((key) => [key, Number(family[key] || 0)])
+    .sort(([, left], [, right]) => right - left);
+  const [bestMetric, bestValue] = strengths[0];
+  const costs = [];
+  if (family.gameOver) costs.push("collapse ended the family campaign early");
+  else if (family.debt >= 60) costs.push(`debt reached ${family.debt}`);
+  else if (dangerPenaltyFor(family)) costs.push("dangerously low meters reduced the score");
+  if (family.exploitMarkers) costs.push(`${family.exploitMarkers} exploit marker${family.exploitMarkers === 1 ? "" : "s"} hurt trust`);
+  if (family.rushedChoiceCount) costs.push(`${family.rushedChoiceCount} rushed choice${family.rushedChoiceCount === 1 ? "" : "s"} weakened gains`);
+  return {
+    strength: `What kept them afloat: ${ACTION_METRIC_LABELS[bestMetric] || bestMetric} finished at ${bestValue}.`,
+    cost: costs.length ? `What cost them: ${costs.join("; ")}.` : "What cost them: no major score penalty was recorded.",
+  };
+}
+
 function metricStandingValue(family, key) {
   if (key === "debt") return 100 - (family.debt ?? 0);
   if (key === "bankTrust") return family.bankTrust ?? 50;
@@ -835,7 +865,7 @@ function choiceImpactChips(choiceId) {
     return {
       key,
       tone: isBenefit ? "buff" : "debuff",
-      label: `${sign} ${ACTION_METRIC_LABELS[key] || key}`,
+      label: `${sign} ${ACTION_METRIC_LABELS[key] || key} ${Math.abs(value)}`,
     };
   });
 }
@@ -1458,7 +1488,7 @@ function App() {
     const data = await runGameRequest(() =>
       gameApi(`/game/rooms/${roomCode}/join`, {
         method: "POST",
-        body: JSON.stringify({ room_code: roomCode, player_name: `Player ${players.length + 1}`, client_id: `demo-${Date.now()}-${players.length}` }),
+        body: JSON.stringify({ room_code: roomCode, player_name: `Player ${players.length + 1}`, client_id: `demo-${Date.now()}-${players.length}`, is_demo: true }),
       })
     );
     if (!data) return;
@@ -1535,6 +1565,18 @@ function App() {
     if (data) syncRoom(data.room);
   }
 
+  async function resolveDemoPolicyVotes(optionId = policySelection) {
+    if (view !== "host" || !hostToken || !policyVote || policyVote.resolved || !optionId) return;
+    playTabletopSound("gavel", { enabled: soundEnabled, volume: 0.5 });
+    const data = await runGameRequest(() =>
+      gameApi(`/game/rooms/${roomCode}/policy-demo-votes`, {
+        method: "POST",
+        body: JSON.stringify({ host_token: hostToken, option_id: optionId }),
+      })
+    );
+    if (data) syncRoom(data.room);
+  }
+
   async function advancePhase() {
     if (view !== "host") return;
     if (!hostToken) {
@@ -1594,6 +1636,7 @@ function App() {
           isBusy={isBusy}
           onSelect={setPolicySelection}
           onVote={() => submitPolicyVote()}
+          onResolveDemoVotes={() => resolveDemoPolicyVotes()}
           onDismiss={() => {
             if (activePolicyKey) setDismissedPolicyKeys((current) => [...new Set([...current, activePolicyKey])]);
           }}
@@ -1842,6 +1885,7 @@ function App() {
                 <p className="gd-kicker">Host Controls</p>
                 <p className="gd-sync">Players {players.length}/{MAX_PLAYERS} - submitted {submittedCount}/{activeRoundPlayers.length}</p>
                 <p className="gd-sync">Phase {Math.min(phaseIndex + 1, phases.length)}/{phases.length} - target 20-25 min</p>
+                <p className="gd-sync"><b>Suggested pace:</b> {shared?.policyVote ? "2-3 min for the ballot" : isResultsPhase ? "4 min for the debrief" : "about 90 sec to discuss and choose"}</p>
                 <p className="gd-sync">Sync {lastSyncedAt ? new Date(lastSyncedAt).toLocaleTimeString() : "waiting"}</p>
                 <button onClick={addDemoPlayer} disabled={isBusy || players.length >= MAX_PLAYERS}>Add demo player</button>
                 <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>{isRecoveryPhase ? "Show results" : "Advance phase"}</button>
@@ -1937,8 +1981,9 @@ function OutcomeReceiptModal({ receipt, onDismiss }) {
   );
 }
 
-function PolicyVoteModal({ policy, view, selectedOptionId, submittedOptionId, isBusy, onSelect, onVote, onDismiss }) {
+function PolicyVoteModal({ policy, view, selectedOptionId, submittedOptionId, isBusy, onSelect, onVote, onResolveDemoVotes, onDismiss }) {
   const winner = policy.options.find((option) => option.id === policy.result?.winnerId);
+  const canResolveDemoVotes = view === "host" && (policy.demoVotesRemaining || 0) > 0;
   return (
     <div className="private-notice-backdrop policy-vote-backdrop" role="presentation">
       <section className="policy-vote-modal" role="dialog" aria-modal="true" aria-labelledby="policy-vote-title">
@@ -1963,7 +2008,7 @@ function PolicyVoteModal({ policy, view, selectedOptionId, submittedOptionId, is
             </div>
             <button onClick={onDismiss}>Continue to family decisions</button>
           </>
-        ) : submittedOptionId || view === "host" ? (
+        ) : submittedOptionId || (view === "host" && !canResolveDemoVotes) ? (
           <div className="policy-waiting">
             <div className="policy-sealed-ballot">Ballot sealed</div>
             <h3>{policy.votesReceived}/{policy.eligibleCount} families have voted</h3>
@@ -1971,7 +2016,7 @@ function PolicyVoteModal({ policy, view, selectedOptionId, submittedOptionId, is
           </div>
         ) : (
           <>
-            <p>{policy.detail}</p>
+            <p>{canResolveDemoVotes ? `Choose the policy that ${policy.demoVotesRemaining} demo ${policy.demoVotesRemaining === 1 ? "family will" : "families will"} support. Real family votes remain private and required.` : policy.detail}</p>
             <div className="policy-option-grid">
               {policy.options.map((option) => (
                 <button key={option.id} className={`policy-option ${selectedOptionId === option.id ? "selected" : ""}`} onClick={() => onSelect(option.id)} disabled={isBusy} aria-pressed={selectedOptionId === option.id}>
@@ -1981,7 +2026,7 @@ function PolicyVoteModal({ policy, view, selectedOptionId, submittedOptionId, is
                 </button>
               ))}
             </div>
-            <button className="policy-submit" onClick={onVote} disabled={!selectedOptionId || isBusy}>Submit secret vote</button>
+            <button className="policy-submit" onClick={canResolveDemoVotes ? onResolveDemoVotes : onVote} disabled={!selectedOptionId || isBusy}>{canResolveDemoVotes ? "Record demo ballots" : "Submit secret vote"}</button>
           </>
         )}
       </section>
@@ -2300,6 +2345,7 @@ function TabletopStationNav({ activeStation, unreadTelegrams, decisionsDisabled,
   ];
   return (
     <nav className="tabletop-station-nav" aria-label="Tabletop stations">
+      <span className="table-rhythm">Read news → discuss → lock 2 cards → resolve together</span>
       {stations.map(([id, label]) => (
         <button
           type="button"
@@ -2329,6 +2375,7 @@ function PhaseStation({ phase, scenario, shared, phaseIndex }) {
         <p className="gd-kicker">Phase {phaseIndex + 1} · {phase.years}</p>
         <h2>{phase.title}</h2>
         <p>{phase.summary}</p>
+        <small className="phase-lesson">Table lesson: {PHASE_LESSONS[phase.id] || "Every household decision is shaped by the wider economy."}</small>
       </div>
       <div className="phase-condition-strip">
         {(phase.conditions || []).map(([label, value, tone]) => (
@@ -2511,11 +2558,14 @@ function CommunityPanel({ shared, playerCount = 0 }) {
           <strong>{current.trust}</strong>
         </div>
       </div>
-      <div className="community-thresholds" aria-label="Community pot thresholds">
-        <span><b>{current.communityNeed}</b> Safety: trusted families receive basic protection</span>
-        <span><b>{current.communitySurplusNeed ?? current.communityNeed + Math.ceil(familiesCompeting / 2)}</b> Surplus: two endangered trusted families receive extra aid</span>
-      </div>
-      <p className="community-last">{current.lastRound}</p>
+      <details className="community-record">
+        <summary>Town record</summary>
+        <div className="community-thresholds" aria-label="Community pot thresholds">
+          <span><b>{current.communityNeed}</b> Safety: trusted families receive basic protection</span>
+          <span><b>{current.communitySurplusNeed ?? current.communityNeed + Math.ceil(familiesCompeting / 2)}</b> Surplus: two endangered trusted families receive extra aid</span>
+        </div>
+        <p className="community-last">{current.lastRound}</p>
+      </details>
     </div>
   );
 }
@@ -2564,6 +2614,7 @@ function PolicyPanel({ shared }) {
           <span>Policy in effect</span>
           <strong>{policy.title}</strong>
           <p>{policy.detail}</p>
+          {policy.expiresAfterPhaseIndex != null && <small className="policy-in-force">The table will feel this decision for the next two phases.</small>}
         </div>
       )}
       {shock && (
@@ -2632,6 +2683,7 @@ function Leaderboard({ players, shared, scenario, rematchScenario, title = "Fina
 function LeaderboardRow({ player, index }) {
   const objective = objectiveResult(player);
   const notes = scoreNotes(player);
+  const outcome = familyOutcomeSummary(player);
   return (
     <div className="leader-row" key={player.id}>
       <b>{index + 1}</b>
@@ -2644,6 +2696,8 @@ function LeaderboardRow({ player, index }) {
         )}
         <small className="score-breakdown">Score path: {scoreBreakdown(player)}</small>
         {!!notes.length && <small className="score-notes">{notes.join(" · ")}</small>}
+        <small className="family-outcome">{outcome.strength}</small>
+        <small className="family-outcome">{outcome.cost}</small>
       </span>
       <strong>{player.score}</strong>
     </div>

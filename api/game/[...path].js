@@ -756,6 +756,9 @@ function applyUnemploymentShock(room, phaseId) {
 }
 
 function applyPhaseEntryEvents(room, phaseId) {
+  if (typeof room.shared?.activePolicy?.expiresAfterPhaseIndex === "number" && room.phase_index > room.shared.activePolicy.expiresAfterPhaseIndex) {
+    room.shared = { ...(room.shared || {}), activePolicy: null };
+  }
   room.entry_events = room.entry_events || {};
   if (room.entry_events[phaseId]) return;
   const policyVote = policyVoteForPhase(phaseId);
@@ -815,6 +818,7 @@ function sharedSnapshot(room, phaseId) {
       options: policy.options.map(({ id, title, detail, historical }) => ({ id, title, detail, historical })),
       votesReceived: policyState?.result?.votesReceived || Object.keys(policyState?.votes || {}).length,
       eligibleCount: policyState?.result?.eligibleCount || room.players.filter((player) => !player.gameOver).length,
+      demoVotesRemaining: room.players.filter((player) => player.isDemo && !player.gameOver && !policyState?.votes?.[player.id]).length,
       resolved: Boolean(policyState?.result?.resolved),
       result: policyState?.result || null,
     } : null,
@@ -1200,7 +1204,7 @@ async function createRoom(scenarioId, options = {}) {
   return null;
 }
 
-async function addPlayer(code, playerName, clientId, familyOverrides = null) {
+async function addPlayer(code, playerName, clientId, familyOverrides = null, isDemo = false) {
   const players = await listPlayers(code);
   const existing = players.find((player) => player.clientId === clientId);
   if (existing) return existing;
@@ -1208,7 +1212,7 @@ async function addPlayer(code, playerName, clientId, familyOverrides = null) {
 
   for (let slot = 0; slot < MAX_PLAYERS; slot += 1) {
     if (players.some((player) => player.slot === slot)) continue;
-    const player = { ...pickFamily(playerName, slot, clientId, familyOverrides), slot };
+    const player = { ...pickFamily(playerName, slot, clientId, familyOverrides), slot, isDemo: Boolean(isDemo) };
     try {
       await writeJson(playerPath(code, slot), player, false);
       return player;
@@ -1260,7 +1264,7 @@ async function handleGameRequest(req, res) {
   const body = getBody(req);
   if (req.method === "POST" && parts[2] === "join") {
     const clientId = body.client_id || crypto.randomUUID();
-    const player = await addPlayer(code, String(body.player_name || "Player").trim() || "Player", clientId, room.test_family_overrides);
+    const player = await addPlayer(code, String(body.player_name || "Player").trim() || "Player", clientId, room.test_family_overrides, body.is_demo);
     if (!player) return json(res, 409, { detail: `Room is full (${MAX_PLAYERS} players max).` });
     room.updated_at = new Date().toISOString();
     await saveRoom(room);
@@ -1299,13 +1303,52 @@ async function handleGameRequest(req, res) {
         activePolicy: {
           id: policy.id,
           title: winningOption.title,
-          detail: state.result.tied ? `${winningOption.detail} The vote tied, so the historical status quo prevailed.` : winningOption.detail,
-          phaseId,
-        },
+        detail: state.result.tied ? `${winningOption.detail} The vote tied, so the historical status quo prevailed.` : winningOption.detail,
+        phaseId,
+        expiresAfterPhaseIndex: Math.min(PHASE_IDS.length - 2, room.phase_index + 2),
+      },
       };
       state.applied = true;
       applyCollapseChecks(room, phaseId, { allowGameOver: false });
       await Promise.all(room.players.map((candidate) => savePlayer(code, candidate)));
+    }
+    room.updated_at = new Date().toISOString();
+    await saveRoom(room);
+    return json(res, 200, { room: publicRoom(room) });
+  }
+
+  if (req.method === "POST" && parts[2] === "policy-demo-votes") {
+    if (!body.host_token || body.host_token !== room.host_token) return json(res, 403, { detail: "Only the host can record demo ballots." });
+    const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
+    const policy = policyVoteForPhase(phaseId);
+    const option = policy?.options.find((candidate) => candidate.id === body.option_id);
+    if (!policy || !option) return json(res, 400, { detail: "This policy vote is not available." });
+    room.policy_votes = room.policy_votes || {};
+    const state = room.policy_votes[phaseId] || { votes: {}, result: null };
+    if (!state.result?.resolved) {
+      const demoPlayers = room.players.filter((player) => player.isDemo && !player.gameOver && !state.votes[player.id]);
+      demoPlayers.forEach((player) => {
+        state.votes[player.id] = option.id;
+        player.policyVotes = { ...(player.policyVotes || {}), [phaseId]: option.id };
+      });
+      await Promise.all(demoPlayers.map((player) => savePlayer(code, player)));
+    }
+    const eligibleIds = room.players.filter((player) => !player.gameOver).map((player) => player.id);
+    state.result = resolvePolicyVote(policy, state.votes, eligibleIds);
+    room.policy_votes[phaseId] = state;
+    if (state.result.resolved && !state.applied) {
+      room.players = room.players.map((player) => {
+        if (player.gameOver) return player;
+        const impacted = applySharedImpact(player, policyImpactForPlayer(policy, state.result.winnerId, player));
+        return addPolicyHistory(impacted, { id: policy.id, title: option.title, phaseId });
+      });
+      room.shared = {
+        ...(room.shared || {}),
+        activePolicy: { id: policy.id, title: option.title, detail: state.result.tied ? `${option.detail} The vote tied, so the historical status quo prevailed.` : option.detail, phaseId, expiresAfterPhaseIndex: Math.min(PHASE_IDS.length - 2, room.phase_index + 2) },
+      };
+      state.applied = true;
+      applyCollapseChecks(room, phaseId, { allowGameOver: false });
+      await Promise.all(room.players.map((player) => savePlayer(code, player)));
     }
     room.updated_at = new Date().toISOString();
     await saveRoom(room);
