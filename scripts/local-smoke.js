@@ -1,5 +1,6 @@
 const DEFAULT_BASE_URL = "http://127.0.0.1:4173/api/game";
 const MAX_PLAYERS = 8;
+const phaseIds = ["postwar", "recession_1921", "early_boom", "speculation", "crash", "deepening", "bank_holiday", "work_relief", "second", "defense_shift"];
 
 const phaseChoices = [
   ["keep_factory_job", "contribute_community_pot"],
@@ -13,6 +14,31 @@ const phaseChoices = [
   ["stay_public_works", "contribute_community_pot"],
   ["seek_defense_work", "inform_on_black_market"],
 ];
+
+const policyOptions = {
+  bank_holiday: ["bank_stabilization", "household_assistance"],
+  work_relief: ["public_works", "direct_relief"],
+  defense_shift: ["defense_contracts", "civilian_recovery"],
+};
+
+async function completePolicyVote(baseUrl, roomCode, state, { tie = false } = {}) {
+  const policy = state.room.shared?.policyVote;
+  if (!policy || policy.resolved) return state;
+  const options = policyOptions[policy.phaseId];
+  const activePlayers = state.room.players.filter((player) => !player.gameOver);
+  await Promise.all(activePlayers.map((player, index) =>
+    request(baseUrl, `/rooms/${roomCode}/policy-vote`, {
+      method: "POST",
+      body: JSON.stringify({ player_id: player.id, option_id: tie ? options[index % 2] : options[0] }),
+    })
+  ));
+  const next = await request(baseUrl, `/rooms/${roomCode}`);
+  if (!next.room.shared.policyVote?.resolved) throw new Error(`Expected ${policy.phaseId} policy vote to resolve.`);
+  if (tie && activePlayers.length % 2 === 0 && next.room.shared.policyVote.result.winnerId !== options[0]) {
+    throw new Error(`Expected a tied ${policy.phaseId} vote to preserve historical status quo.`);
+  }
+  return next;
+}
 
 function getBaseUrl() {
   const baseUrl = process.env.GAME_API_URL || DEFAULT_BASE_URL;
@@ -171,7 +197,7 @@ async function assertEmergencyCollapse(baseUrl) {
   }
   let state = await request(baseUrl, `/rooms/${roomCode}/choices`, {
     method: "POST",
-    body: JSON.stringify({ player_id: player.id, choices: ["keep_factory_job", "contribute_community_pot"] }),
+    body: JSON.stringify({ player_id: player.id, choices: ["keep_factory_job", "hoard_relief"] }),
   });
   player = state.room.players[0];
   if (!player.gameOver || player.gameOver.reason !== "health") {
@@ -199,6 +225,7 @@ async function assertRematchJoinLink(baseUrl) {
   const { roomCode, hostToken } = await createFullRoom(baseUrl, "Rematch Probe");
   let state = await request(baseUrl, `/rooms/${roomCode}`);
   for (let round = 0; round < phaseChoices.length; round += 1) {
+    state = await completePolicyVote(baseUrl, roomCode, state, { tie: state.room.shared?.policyVote?.phaseId === "bank_holiday" });
     await Promise.all(
       state.room.players.map((player) =>
         request(baseUrl, `/rooms/${roomCode}/choices`, {
@@ -261,6 +288,7 @@ async function main() {
   }
 
   for (let round = 0; round < phaseChoices.length; round += 1) {
+    state = await completePolicyVote(baseUrl, roomCode, state, { tie: state.room.shared?.policyVote?.phaseId === "bank_holiday" });
     const choices = phaseChoices[round];
     const activePlayers = state.room.players.filter((player) => !player.gameOver);
     if (!activePlayers.length) {
@@ -282,6 +310,9 @@ async function main() {
     if (!state.room.shared || typeof state.room.shared.trust !== "number") {
       throw new Error("Expected shared community state after choices resolved");
     }
+    if (state.room.players.some((player) => !player.gameOver && player.roundReceipt?.phaseId !== phaseIds[round])) {
+      throw new Error("Expected resolved families to receive a private outcome receipt");
+    }
     if (round === 1 && state.room.shared.last?.potMetNeed) {
       throw new Error("Expected hard betrayal to collapse the community pot when every player takes a selfish edge");
     }
@@ -295,13 +326,7 @@ async function main() {
       }
     }
     if (expectedPhase === 6) {
-      if (state.room.shared.activePolicy?.id !== "emergency_banking_act") {
-        throw new Error("Expected the 1933 Emergency Banking Act policy to be active");
-      }
-      const activeAfterPolicy = state.room.players.filter((player) => !player.gameOver);
-      if (activeAfterPolicy.some((player) => !player.policyHistory?.some((policy) => policy.id === "emergency_banking_act"))) {
-        throw new Error("Expected every active family to record the 1933 banking policy effect");
-      }
+      if (state.room.shared.policyVote?.phaseId !== "bank_holiday") throw new Error("Expected the 1933 banking ballot to open.");
     }
   }
   if (state.room.phaseIndex !== 10) {

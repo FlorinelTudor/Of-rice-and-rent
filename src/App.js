@@ -820,6 +820,12 @@ function choiceTone(choiceId) {
   return "neutral";
 }
 
+function choiceGridShape(count) {
+  if (count <= 4) return { columns: Math.max(1, count), rows: 1, layout: "wide" };
+  if (count <= 8) return { columns: 4, rows: 2, layout: "standard" };
+  return { columns: 5, rows: Math.ceil(count / 5), layout: "dense" };
+}
+
 function choiceImpactChips(choiceId) {
   const impact = ACTION_CARD_IMPACTS[choiceId];
   if (!impact) return [];
@@ -1089,6 +1095,8 @@ function App() {
   const [telegramArchive, setTelegramArchive] = useState(savedGame.telegramArchive || []);
   const [readTelegramKeys, setReadTelegramKeys] = useState(savedGame.readTelegramKeys || []);
   const [dismissedNoticeKeys, setDismissedNoticeKeys] = useState(savedGame.dismissedNoticeKeys || []);
+  const [dismissedPolicyKeys, setDismissedPolicyKeys] = useState(savedGame.dismissedPolicyKeys || []);
+  const [dismissedReceiptKeys, setDismissedReceiptKeys] = useState(savedGame.dismissedReceiptKeys || []);
   const [leaderboardVisible, setLeaderboardVisible] = useState(false);
   const viewRef = useRef(savedGame.view || "start");
   const lastNoticeSoundRef = useRef("");
@@ -1105,6 +1113,8 @@ function App() {
   const activeRoundPlayers = players.filter((p) => !p.gameOver);
   const submittedChoices = activePlayer?.choices?.[phase.id] || [];
   const submittedCount = activeRoundPlayers.filter((p) => p.choices?.[phase.id]?.length === 2).length;
+  const policyVote = shared?.policyVote || null;
+  const activePolicyKey = policyVote?.resolved ? `${policyVote.id}-${policyVote.result?.winnerId}` : "";
   const activeChoices = useMemo(() => {
     if (activePlayer?.gameOver) return [];
     if (!phase.choices.length) return phase.choices;
@@ -1172,6 +1182,13 @@ function App() {
     return notices;
   }, [activePlayer, isResultsPhase, phase?.id, previousPhaseId]);
   const activePrivateNotice = privateNotices.find((notice) => !dismissedNoticeKeys.includes(notice.key));
+  const receiptKey = activePlayer?.roundReceipt ? `${activePlayer.id}-${activePlayer.roundReceipt.phaseId}-receipt` : "";
+  const activeReceipt = activePlayer?.roundReceipt && activePlayer.roundReceipt.phaseId === previousPhaseId && !dismissedReceiptKeys.includes(receiptKey)
+    ? activePlayer.roundReceipt : null;
+  const showPolicyModal = Boolean(
+    policyVote && !phaseRevealVisible && !activeReceipt && !activePrivateNotice &&
+    (!policyVote.resolved || !dismissedPolicyKeys.includes(activePolicyKey))
+  );
 
   useEffect(() => {
     viewRef.current = view;
@@ -1213,18 +1230,20 @@ function App() {
         telegramArchive,
         readTelegramKeys,
         dismissedNoticeKeys,
+        dismissedPolicyKeys,
+        dismissedReceiptKeys,
         lastSyncedAt,
         joinClientId: joinClientIdRef.current,
       })
     );
-  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, activeStation, soundEnabled, telegramArchive, readTelegramKeys, dismissedNoticeKeys, lastSyncedAt]);
+  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, activeStation, soundEnabled, telegramArchive, readTelegramKeys, dismissedNoticeKeys, dismissedPolicyKeys, dismissedReceiptKeys, lastSyncedAt]);
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
     window.scrollTo(0, 0);
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     setPhaseRevealVisible(true);
-    const timer = window.setTimeout(() => setPhaseRevealVisible(false), reduceMotion ? 350 : 4400);
+    const timer = window.setTimeout(() => setPhaseRevealVisible(false), reduceMotion ? 350 : 3500);
     return () => window.clearTimeout(timer);
   }, [phase.id, phaseIndex, view]);
 
@@ -1479,6 +1498,18 @@ function App() {
     setSelected([]);
   }
 
+  async function submitPolicyVote(optionId) {
+    if (!activePlayer || !policyVote || policyVote.resolved) return;
+    playTabletopSound("gavel", { enabled: soundEnabled, volume: 0.5 });
+    const data = await runGameRequest(() =>
+      gameApi(`/game/rooms/${roomCode}/policy-vote`, {
+        method: "POST",
+        body: JSON.stringify({ player_id: activePlayer.id, option_id: optionId }),
+      })
+    );
+    if (data) syncRoom(data.room);
+  }
+
   async function advancePhase() {
     if (view !== "host") return;
     if (!hostToken) {
@@ -1520,8 +1551,26 @@ function App() {
         </div>
       </section>
       {apiError && <div className="gd-alert">{apiError}</div>}
-      {activePrivateNotice && !phaseRevealVisible && (
+      {activeReceipt && !phaseRevealVisible && (
+        <OutcomeReceiptModal receipt={activeReceipt} onDismiss={() => {
+          playTabletopSound("stamp", { enabled: soundEnabled, volume: 0.45 });
+          setDismissedReceiptKeys((current) => [...new Set([...current, receiptKey])]);
+        }} />
+      )}
+      {activePrivateNotice && !activeReceipt && !phaseRevealVisible && (
         <PrivateNoticeModal notice={activePrivateNotice} onDismiss={dismissPrivateNotice} />
+      )}
+      {showPolicyModal && (
+        <PolicyVoteModal
+          policy={policyVote}
+          view={view}
+          selectedOptionId={activePlayer?.policyVotes?.[phase.id]}
+          isBusy={isBusy}
+          onVote={submitPolicyVote}
+          onDismiss={() => {
+            if (activePolicyKey) setDismissedPolicyKeys((current) => [...new Set([...current, activePolicyKey])]);
+          }}
+        />
       )}
       {leaderboardVisible && (
         <LeaderboardModal
@@ -1645,15 +1694,16 @@ function App() {
                 {activePlayer?.gameOver ? (
                   <FamilyGameOver family={activePlayer} />
                 ) : activeChoices.length > 0 && submittedChoices.length > 0 ? (
-                  <div className="gd-panel gd-submitted">
-                    <p className="gd-kicker">Choices Submitted</p>
-                    <h2>Ready for the next phase</h2>
-                    <p>
-                      Your choices were applied to the family meters. The phase will move forward automatically once every
-                      player in the room has submitted, or the host can advance it manually.
-                    </p>
+                  <div className="gd-panel gd-submitted submitted-tabletop">
+                    <p className="gd-kicker">Decisions sealed</p>
+                    <h2>Your cards are face down</h2>
+                    <div className="submitted-card-row" aria-label="Two submitted decision cards">
+                      <div className="submitted-card-back"><span>Private decision</span></div>
+                      <div className="submitted-card-back"><span>Private decision</span></div>
+                    </div>
                     {rushedChoiceWarning && <p className="gd-sync">Quick choices gave reduced positive gains this round.</p>}
-                    <p className="gd-sync">Submitted {submittedCount}/{activeRoundPlayers.length}</p>
+                    <p className="gd-sync ready-count">{submittedCount}/{activeRoundPlayers.length} families ready</p>
+                    <p>Your choices remain private. You can revisit the phase, news, family ledger, and telegram while the table finishes.</p>
                     {view === "host" && <button onClick={advancePhase} disabled={isBusy || isFinalPhase}>Advance now</button>}
                   </div>
                 ) : activePlayer ? (
@@ -1677,7 +1727,14 @@ function App() {
                           onChooseRival={chooseRival}
                         />
                       )}
-                      <div className="gd-choice-grid">
+                      <div
+                        className={`gd-choice-grid choice-layout-${choiceGridShape(activeChoices.length).layout}`}
+                        data-choice-count={activeChoices.length}
+                        style={{
+                          "--choice-columns": choiceGridShape(activeChoices.length).columns,
+                          "--choice-rows": choiceGridShape(activeChoices.length).rows,
+                        }}
+                      >
                         {activeChoices.map(([id, title, detail], index) => {
                           const blockedByWorkRule = !selected.includes(id) && WORK_CHOICES.has(id) && selected.some((item) => WORK_CHOICES.has(item));
                           const blockedBySabotageRule = !selected.includes(id) && SABOTAGE_CHOICE_IDS.includes(id) && selected.some((item) => SABOTAGE_CHOICE_IDS.includes(item));
@@ -1803,6 +1860,83 @@ function HardModeLeaderboardPanel({ players, activePlayer, onShowLeaderboard }) 
         <p className="gd-sync">Your current rank: {activeRank}/{ranked.length}</p>
       )}
       <button onClick={onShowLeaderboard}>Show leaderboard</button>
+    </div>
+  );
+}
+
+function OutcomeReceiptModal({ receipt, onDismiss }) {
+  const deltas = Object.entries(receipt.deltas || {});
+  return (
+    <div className="private-notice-backdrop receipt-backdrop" role="presentation">
+      <section className="outcome-receipt" role="dialog" aria-modal="true" aria-labelledby="outcome-receipt-title">
+        <div className="receipt-heading">
+          <div><p className="gd-kicker">Private Household Ledger</p><h2 id="outcome-receipt-title">What your last choices changed</h2></div>
+          <span className="receipt-stamp">Recorded</span>
+        </div>
+        <div className="receipt-choices">
+          {(receipt.choices || []).map((choice) => <span key={choice}>{choice.replaceAll("_", " ")}</span>)}
+        </div>
+        <div className="receipt-deltas">
+          {deltas.length ? deltas.map(([metric, value]) => (
+            <span className={value > 0 ? "positive" : "negative"} key={metric}><b>{value > 0 ? `+${value}` : value}</b> {metric}</span>
+          )) : <span>No family meter changed.</span>}
+        </div>
+        {receipt.hiring && <p><b>{receipt.hiring.title}:</b> {receipt.hiring.detail}</p>}
+        <p><b>Community:</b> {receipt.communityDetail}</p>
+        {receipt.rival && <p><b>Rival action:</b> {receipt.rival.detail}</p>}
+        <p className="receipt-history">{receipt.historical}</p>
+        <button onClick={onDismiss}>Stamp and continue</button>
+      </section>
+    </div>
+  );
+}
+
+function PolicyVoteModal({ policy, view, selectedOptionId, isBusy, onVote, onDismiss }) {
+  const winner = policy.options.find((option) => option.id === policy.result?.winnerId);
+  return (
+    <div className="private-notice-backdrop policy-vote-backdrop" role="presentation">
+      <section className="policy-vote-modal" role="dialog" aria-modal="true" aria-labelledby="policy-vote-title">
+        <div className="policy-ballot-heading">
+          <p className="gd-kicker">Public Policy Ballot</p>
+          <span className="policy-secret-stamp">Secret vote</span>
+        </div>
+        <h2 id="policy-vote-title">{policy.resolved ? "The town has decided" : policy.title}</h2>
+        {policy.resolved ? (
+          <>
+            <div className="policy-result-sheet">
+              <p className="gd-kicker">Policy in effect</p>
+              <h3>{winner?.title}</h3>
+              <p>{winner?.detail}</p>
+              <div className="policy-tally">
+                {policy.options.map((option) => (
+                  <span key={option.id}><b>{policy.result?.tally?.[option.id] || 0}</b> {option.title}</span>
+                ))}
+              </div>
+              {policy.result?.tied && <p className="policy-tie-note">The ballot tied. The historical status quo prevailed.</p>}
+            </div>
+            <button onClick={onDismiss}>Continue to family decisions</button>
+          </>
+        ) : selectedOptionId || view === "host" ? (
+          <div className="policy-waiting">
+            <div className="policy-sealed-ballot">Ballot sealed</div>
+            <h3>{policy.votesReceived}/{policy.eligibleCount} families have voted</h3>
+            <p>Votes remain anonymous until every active family has answered. Submission speed gives no advantage.</p>
+          </div>
+        ) : (
+          <>
+            <p>{policy.detail}</p>
+            <div className="policy-option-grid">
+              {policy.options.map((option) => (
+                <button key={option.id} className="policy-option" onClick={() => onVote(option.id)} disabled={isBusy}>
+                  <span>{option.historical || "Alternative proposal"}</span>
+                  <strong>{option.title}</strong>
+                  <p>{option.detail}</p>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }
@@ -1966,86 +2100,121 @@ function ResultsPhase({
   nextRoomCode,
   onJoinNextRoom,
 }) {
+  const [resultsScene, setResultsScene] = useState("winner");
   const awards = computeAwards(players, scenario);
   const debrief = historicalDebrief(players, shared);
   const selectedScenario = SCENARIO_OPTIONS.find((option) => option.id === selectedScenarioId) || SCENARIO_OPTIONS[0];
+  const scenes = [
+    ["winner", "Winner reveal"],
+    ["ledgers", "Final ledgers"],
+    ["awards", "Awards & standing"],
+    ["debrief", "Historical debrief"],
+  ];
   return (
     <div className="results-phase">
-      <section className="results-hero">
-        <div>
-          <p className="gd-kicker">After Action Review</p>
-          <h2>Final Results</h2>
-          <p>Leaderboard, awards, hidden objectives, and historical discussion prompts for the room.</p>
-        </div>
-        {awards[0] && (
-          <div className="results-winner">
-            <img src={asset("award-most-resilient-family.png")} alt="Most Resilient Family badge" />
-            <span>Winner</span>
-            <strong>{awards[0].player.playerName || "Player"} ({awards[0].player.name} Family)</strong>
-            <small>{awards[0].detail}</small>
+      <section className="results-tabletop">
+        <span className="scene-label">Final table · After action review</span>
+        <span className="scene-sound">Room sound · ledger stamp</span>
+
+        {resultsScene === "winner" && (
+          <div className="results-table-scene results-winner-scene">
+            <div className="results-final-sheet">
+              <img src={asset("final-results-ledgers.png")} alt="Families reviewing their final ledgers" />
+              <div>
+                <p className="gd-kicker">The ledgers are closed</p>
+                <h2>Who best kept the dream alive?</h2>
+              </div>
+            </div>
+            {awards[0] && (
+              <article className="results-winner-telegram">
+                <img src={asset("award-most-resilient-family.png")} alt="Most Resilient Family badge" />
+                <div>
+                  <span>Final declaration</span>
+                  <strong>{awards[0].player.playerName || "Player"} ({awards[0].player.name} Family)</strong>
+                  <small>{awards[0].detail}</small>
+                </div>
+              </article>
+            )}
+          </div>
+        )}
+
+        {resultsScene === "ledgers" && (
+          <section className="results-table-scene results-paper results-leaderboard results-leaderboard-scene">
+            <p className="gd-kicker">Final Family Ledgers</p>
+            <h2>Every choice left a mark</h2>
+            <div className="results-ledger-list">
+              {players.map((player, index) => (
+                <LeaderboardRow player={player} index={index} key={player.id} />
+              ))}
+            </div>
+            <p className="gd-note">Scores reward strong family meters and objectives. Debt, danger, collapse, betrayal, rushed choices, repeated patterns, and exclusion reduce the total.</p>
+          </section>
+        )}
+
+        {resultsScene === "awards" && (
+          <div className="results-table-scene results-awards-scene">
+            <section className="results-paper results-awards-sheet">
+              <p className="gd-kicker">Room Awards</p>
+              <h2>How each family is remembered</h2>
+              <div className="award-grid results-award-grid">
+                {awards.map((award) => (
+                  <div className={award.primary ? "award-card primary" : "award-card"} key={award.id}>
+                    <span>{award.primary ? "1" : "-"}</span>
+                    <div>
+                      <strong>{award.title}</strong>
+                      <p>{award.player.playerName || "Player"} ({award.player.name} Family)</p>
+                      <small>{award.detail}</small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <HistoricalStandingsPanel players={players} />
+          </div>
+        )}
+
+        {resultsScene === "debrief" && (
+          <div className="results-table-scene results-debrief-scene">
+            <section className="results-paper results-debrief-sheet">
+              <p className="gd-kicker">Historical Debrief</p>
+              <h2>What this room experienced</h2>
+              {debrief.map((takeaway) => <p key={takeaway}>{takeaway}</p>)}
+              <p className="historical-method-note">
+                Historical standing is a teaching estimate, not a measured census percentile. It compares the final ledger with documented pressures on similar households, including job loss, bank and farm stress, discrimination, relief access, and recovery timing.
+              </p>
+            </section>
+            <section className="results-paper results-rematch-sheet">
+              <p className="gd-kicker">Next Table Challenge</p>
+              <h2>Choose the next scenario</h2>
+              {rematchScenario && <small>Suggested next: {rematchScenario.title}. The host can override it.</small>}
+              <ScenarioPicker selectedScenarioId={selectedScenarioId} onSelect={onSelectScenario} compact />
+              {view === "host" && (
+                <button onClick={() => onCreateScenario(selectedScenario.id)} disabled={isBusy}>
+                  {isBusy ? "Creating..." : `Create next run: ${selectedScenario.title}`}
+                </button>
+              )}
+              {view !== "host" && nextRoomCode && (
+                <button onClick={() => onJoinNextRoom(nextRoomCode)} disabled={isBusy}>Join next game: Room {nextRoomCode}</button>
+              )}
+              {view !== "host" && !nextRoomCode && <small>Waiting for the host to start the next room.</small>}
+            </section>
           </div>
         )}
       </section>
 
-      <section className="results-board">
-        <div className="gd-panel results-leaderboard">
-          <p className="gd-kicker">Leaderboard</p>
-          <h2>Scores include danger penalties</h2>
-          {players.map((player, index) => (
-            <LeaderboardRow player={player} index={index} key={player.id} />
-          ))}
-          <p className="gd-note">Each row shows how that family reached its score. Higher meters help; debt, danger lows, collapse, betrayal, rushed play, predictable play, and community exclusion pull the score down.</p>
-        </div>
-
-        <div className="results-side-column">
-          <div className="gd-panel results-awards">
-            <p className="gd-kicker">Awards</p>
-            <div className="award-grid results-award-grid">
-              {awards.map((award) => (
-                <div className={award.primary ? "award-card primary" : "award-card"} key={award.id}>
-                  <span>{award.primary ? "★" : "•"}</span>
-                  <div>
-                    <strong>{award.title}</strong>
-                    <p>{award.player.playerName || "Player"} ({award.player.name} Family)</p>
-                    <small>{award.detail}</small>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <HistoricalStandingsPanel players={players} />
-        </div>
-      </section>
-
-      <section className="results-debrief-grid">
-        <div className="debrief-panel results-debrief">
-          <p className="gd-kicker">Historical Debrief</p>
-          <h3>What this room experienced</h3>
-          {debrief.map((takeaway) => (
-            <p key={takeaway}>{takeaway}</p>
-          ))}
-          <p className="historical-method-note">
-            Historical standing is a teaching estimate: it compares the final family ledger with known pressures on similar households, including job loss, farm and bank stress, discrimination, relief access, and recovery timing.
-          </p>
-        </div>
-        <div className="rematch-panel results-rematch">
-          <p className="gd-kicker">Next Table Challenge</p>
-          <h3>Choose the next scenario</h3>
-          {rematchScenario && <small>Suggested next: {rematchScenario.title}. The host can override it.</small>}
-          <ScenarioPicker selectedScenarioId={selectedScenarioId} onSelect={onSelectScenario} />
-          {view === "host" && (
-            <button onClick={() => onCreateScenario(selectedScenario.id)} disabled={isBusy}>
-              {isBusy ? "Creating..." : `Create next run: ${selectedScenario.title}`}
-            </button>
-          )}
-          {view !== "host" && nextRoomCode && (
-            <button onClick={() => onJoinNextRoom(nextRoomCode)} disabled={isBusy}>
-              Join next game: Room {nextRoomCode}
-            </button>
-          )}
-          {view !== "host" && !nextRoomCode && <small>Waiting for the host to start the next room.</small>}
-        </div>
-      </section>
+      <nav className="results-scene-nav" aria-label="Final results sections">
+        {scenes.map(([id, label]) => (
+          <button
+            type="button"
+            key={id}
+            className={resultsScene === id ? "active" : ""}
+            aria-current={resultsScene === id ? "page" : undefined}
+            onClick={() => setResultsScene(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
@@ -2293,6 +2462,10 @@ function CommunityPanel({ shared, playerCount = 0 }) {
           <span>Trust climate</span>
           <strong>{current.trust}</strong>
         </div>
+      </div>
+      <div className="community-thresholds" aria-label="Community pot thresholds">
+        <span><b>{current.communityNeed}</b> Safety: trusted families receive basic protection</span>
+        <span><b>{current.communitySurplusNeed ?? current.communityNeed + Math.ceil(familiesCompeting / 2)}</b> Surplus: two endangered trusted families receive extra aid</span>
       </div>
       <p className="community-last">{current.lastRound}</p>
     </div>

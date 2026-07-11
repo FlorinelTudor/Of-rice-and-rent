@@ -19,6 +19,14 @@ const PATTERNS = {
     { type: "tone", duration: 0.25, gain: 0.07, frequency: 880, endFrequency: 830 },
     { type: "tone", delay: 0.19, duration: 0.34, gain: 0.055, frequency: 1175, endFrequency: 1080 },
   ],
+  gavel: [
+    { type: "tone", duration: 0.12, gain: 0.13, frequency: 145, endFrequency: 58 },
+    { type: "noise", duration: 0.07, gain: 0.09, filter: 520 },
+    { type: "tone", delay: 0.2, duration: 0.1, gain: 0.1, frequency: 125, endFrequency: 52 },
+  ],
+  ready: [
+    { type: "tone", duration: 0.16, gain: 0.045, frequency: 520, endFrequency: 660 },
+  ],
 };
 
 let audioContext;

@@ -107,6 +107,10 @@ describe("staged tabletop experience", () => {
 
     const choiceButton = container.querySelector(".gd-choice-grid button");
     expect(choiceButton).not.toBeNull();
+    const choiceGrid = container.querySelector(".gd-choice-grid");
+    expect(choiceGrid.dataset.choiceCount).toBe(String(choiceGrid.querySelectorAll("button").length));
+    expect(choiceGrid.classList.contains("choice-layout-standard")).toBe(true);
+    expect(choiceGrid.querySelectorAll("button").length).toBeGreaterThanOrEqual(7);
     await act(async () => choiceButton.click());
     expect(choiceButton.querySelector(".choice-selection-stamp")?.textContent).toContain("Choice made");
   });
@@ -159,6 +163,125 @@ describe("staged tabletop experience", () => {
     await act(async () => hardMode.click());
     expect(hardMode.getAttribute("aria-pressed")).toBe("true");
     expect(hardMode.textContent).toContain("Rivalry Active");
+  });
+
+  test("releases the phase table after the shorter 3.5 second reveal", async () => {
+    jest.useFakeTimers();
+    window.matchMedia = jest.fn().mockReturnValue({ matches: false });
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      view: "player",
+    }));
+    await act(async () => root.render(<App />));
+    expect(container.querySelector(".phase-reveal")).not.toBeNull();
+
+    await act(async () => jest.advanceTimersByTime(3501));
+    expect(container.querySelector(".phase-reveal")).toBeNull();
+    jest.useRealTimers();
+  });
+
+  test("stages final results through the approved tabletop scenes", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      phaseIndex: 11,
+      players: [{ ...player, score: 412 }],
+    }));
+    await act(async () => root.render(<App />));
+
+    expect(container.querySelector(".results-tabletop")).not.toBeNull();
+    expect(container.querySelector(".results-winner-scene")).not.toBeNull();
+    expect(container.querySelectorAll(".results-scene-nav button")).toHaveLength(4);
+
+    const ledgersButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Final ledgers")
+    );
+    await act(async () => ledgersButton.click());
+    expect(container.querySelector(".results-leaderboard-scene")).not.toBeNull();
+
+    const awardsButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Awards & standing")
+    );
+    await act(async () => awardsButton.click());
+    expect(container.querySelector(".results-awards-scene")).not.toBeNull();
+
+    const debriefButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Historical debrief")
+    );
+    await act(async () => debriefButton.click());
+    expect(container.querySelector(".results-debrief-scene")).not.toBeNull();
+  });
+
+  test("uses a dense overview when emergency and rivalry cards expand the hand", async () => {
+    const rival = { ...player, id: "player-2", name: "Carter", playerName: "Morgan" };
+    const pressuredPlayer = {
+      ...player,
+      rivalId: rival.id,
+      collapseWarning: { emergencyChoiceId: "emergency_health" },
+      employmentShock: { phaseId: "deepening" },
+    };
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      players: [pressuredPlayer, rival],
+      activePlayerId: pressuredPlayer.id,
+      phaseIndex: 5,
+      scenario: { ...room.scenario, hardMode: true },
+    }));
+    await act(async () => root.render(<App />));
+
+    const decisionButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Make a decision")
+    );
+    await act(async () => decisionButton.click());
+    const choiceGrid = container.querySelector(".gd-choice-grid");
+    expect(choiceGrid.classList.contains("choice-layout-dense")).toBe(true);
+    expect(Number(choiceGrid.dataset.choiceCount)).toBeGreaterThan(8);
+    expect(choiceGrid.querySelectorAll("button")).toHaveLength(Number(choiceGrid.dataset.choiceCount));
+  });
+
+  test("shows a secret policy ballot and anonymous vote progress", async () => {
+    jest.useFakeTimers();
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      phaseIndex: 6,
+      shared: {
+        ...room.shared,
+        policyVote: {
+          id: "banking_crisis_vote",
+          phaseId: "bank_holiday",
+          title: "How should Washington answer the banking crisis?",
+          detail: "Every family votes in secret.",
+          votesReceived: 0,
+          eligibleCount: 1,
+          resolved: false,
+          options: [
+            { id: "bank_stabilization", title: "Stabilize the banks", detail: "Reopen sound banks.", historical: "Historical status quo" },
+            { id: "household_assistance", title: "Emergency household aid", detail: "Fund food and medicine." },
+          ],
+        },
+      },
+    }));
+    await act(async () => root.render(<App />));
+    await act(async () => jest.advanceTimersByTime(351));
+
+    expect(container.querySelector(".policy-vote-modal")).not.toBeNull();
+    expect(container.textContent).toContain("Secret vote");
+    expect(container.textContent).toContain("Historical status quo");
+    jest.useRealTimers();
+  });
+
+  test("turns submitted decisions face down while families finish", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      players: [{ ...player, choices: { postwar: ["keep_factory_job", "contribute_community_pot"] } }],
+    }));
+    await act(async () => root.render(<App />));
+
+    const decisionButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Make a decision")
+    );
+    await act(async () => decisionButton.click());
+    expect(container.querySelectorAll(".submitted-card-back")).toHaveLength(2);
+    expect(container.textContent).toContain("1/1 families ready");
   });
 
   test("shows Town Hall only once on the host table", async () => {

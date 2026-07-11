@@ -1,4 +1,12 @@
 const crypto = require("crypto");
+const {
+  communityOutcomeFor,
+  metricDeltas,
+  metricSnapshot,
+  policyImpactForPlayer,
+  policyVoteForPhase,
+  resolvePolicyVote,
+} = require("../../game/shared-rules");
 const { BlobError, get, list, put } = require("@vercel/blob");
 
 const MAX_PLAYERS = 8;
@@ -783,7 +791,8 @@ function applyUnemploymentShock(room, phaseId) {
 function applyPhaseEntryEvents(room, phaseId) {
   room.entry_events = room.entry_events || {};
   if (room.entry_events[phaseId]) return;
-  const policy = POLICY_EFFECTS[phaseId];
+  const policyVote = policyVoteForPhase(phaseId);
+  const policy = policyVote ? null : POLICY_EFFECTS[phaseId];
   if (policy) {
     room.players = room.players.map((player) => applyPolicyEffect(player, phaseId));
     room.shared = {
@@ -819,6 +828,9 @@ function resolveScarcity(contenders, slots) {
 
 function sharedSnapshot(room, phaseId) {
   const playerCount = Math.max(1, (room.players || []).length);
+  const capacity = phaseCapacity(phaseId, playerCount, room.scenario_id, room.hard_mode);
+  const policy = policyVoteForPhase(phaseId);
+  const policyState = room.policy_votes?.[phaseId] || null;
   return {
     trust: room.shared?.trust ?? 55,
     communityPot: room.shared?.communityPot ?? 3,
@@ -827,7 +839,19 @@ function sharedSnapshot(room, phaseId) {
     lastShock: room.shared?.lastShock || null,
     scenarioEvent: room.shared?.scenarioEvent || null,
     eventVariant: eventVariantForRoom(room, phaseId),
-    ...phaseCapacity(phaseId, playerCount, room.scenario_id, room.hard_mode),
+    policyVote: policy ? {
+      id: policy.id,
+      phaseId,
+      title: policy.title,
+      detail: policy.detail,
+      options: policy.options.map(({ id, title, detail, historical }) => ({ id, title, detail, historical })),
+      votesReceived: policyState?.result?.votesReceived || Object.keys(policyState?.votes || {}).length,
+      eligibleCount: policyState?.result?.eligibleCount || room.players.filter((player) => !player.gameOver).length,
+      resolved: Boolean(policyState?.result?.resolved),
+      result: policyState?.result || null,
+    } : null,
+    ...capacity,
+    communitySurplusNeed: communityOutcomeFor(room.shared?.communityPot ?? 3, capacity.communityNeed, playerCount).surplusNeed,
   };
 }
 
@@ -853,7 +877,12 @@ function resolveSharedRound(room, phaseId) {
   const reliefWinners = resolveScarcity(relief, capacity.reliefSlots);
   const betrayalDrain = room.hard_mode ? BETRAYAL_POT_DRAIN + 1 : BETRAYAL_POT_DRAIN;
   const communityPot = Math.max(0, (room.shared?.communityPot ?? 3) + cooperate.length * 2 - betray.length * betrayalDrain);
-  const potMetNeed = communityPot >= capacity.communityNeed;
+  const communityOutcome = communityOutcomeFor(communityPot, capacity.communityNeed, round.length);
+  const potMetNeed = communityOutcome.tier !== "shortfall";
+  const trustedByDanger = round
+    .filter(({ player, choices }) => !choiceHasTag(choices, "betray") && (player.exploitMarkers || 0) < 4 && (player.reputation ?? 50) >= 20)
+    .sort((a, b) => (a.player.food + a.player.health + a.player.hope + a.player.stability) - (b.player.food + b.player.health + b.player.hope + b.player.stability));
+  const surplusRecipients = new Set(communityOutcome.tier === "surplus" ? trustedByDanger.slice(0, 2).map(({ player }) => player.id) : []);
 
   room.players = room.players.map((player) => {
     if (player.gameOver) return player;
@@ -891,6 +920,7 @@ function resolveSharedRound(room, phaseId) {
         next.communityMemoryHits = (next.communityMemoryHits || 0) + 1;
       } else {
         next = applySharedImpact(next, { food: 4, hope: 5, stability: 3 });
+        if (surplusRecipients.has(player.id)) next = applySharedImpact(next, { food: 6, health: 4, hope: 3 });
       }
     } else {
       next = applySharedImpact(next, { food: -4, hope: -8, stability: -7 });
@@ -927,12 +957,12 @@ function resolveSharedRound(room, phaseId) {
     });
   }
 
-  const trustDelta = cooperate.length * 4 - betray.length * (room.hard_mode ? 22 : 18) + (potMetNeed ? 4 : -8) - Math.max(0, work.length - capacity.workSlots) * 2;
+  const trustDelta = cooperate.length * 4 - betray.length * (room.hard_mode ? 22 : 18) + (communityOutcome.tier === "surplus" ? 7 : potMetNeed ? 4 : -8) - Math.max(0, work.length - capacity.workSlots) * 2;
   room.shared = {
     trust: clamp((room.shared?.trust ?? 55) + trustDelta),
-    communityPot: Math.max(0, communityPot - capacity.communityNeed),
+    communityPot: Math.max(0, communityPot - communityOutcome.spend),
     lastRound: `${cooperate.length} helped the community, ${betray.length} stole from the shared pool. ${
-      potMetNeed ? "The community pot held." : "The pot fell short."
+      communityOutcome.tier === "surplus" ? "The pot reached a surplus and protected the families in greatest danger." : potMetNeed ? "The community pot held." : "The pot fell short."
     }`,
     last: {
       phaseId,
@@ -943,10 +973,32 @@ function resolveSharedRound(room, phaseId) {
       workSlots: capacity.workSlots,
       reliefSlots: capacity.reliefSlots,
       potMetNeed,
+      potTier: communityOutcome.tier,
+      surplusRecipients: [...surplusRecipients],
       sabotage: sabotage.length,
     },
   };
   room.resolved_phases[phaseId] = true;
+  room.players = room.players.map((player) => {
+    const before = player.roundSnapshots?.[phaseId];
+    if (!before) return player;
+    const choices = player.choices?.[phaseId] || [];
+    return {
+      ...player,
+      roundReceipt: {
+        phaseId,
+        choices,
+        deltas: metricDeltas(before, metricSnapshot(player)),
+        hiring: player.hiringResult?.phaseId === phaseId ? player.hiringResult : null,
+        communityTier: communityOutcome.tier,
+        communityDetail: communityOutcome.tier === "surplus"
+          ? "The shared pool reached surplus protection. The most endangered trusted families received extra aid."
+          : communityOutcome.tier === "safety" ? "The shared pool funded basic protection for trusted families." : "The shared pool could not meet the town's minimum need.",
+        rival: player.rivalHit?.phaseId === phaseId ? player.rivalHit : null,
+        historical: "Household choices mattered, but jobs, relief access, public policy, and collective trust also shaped survival.",
+      },
+    };
+  });
   applyCollapseChecks(room, phaseId);
 }
 
@@ -1243,8 +1295,54 @@ async function handleGameRequest(req, res) {
     return json(res, 200, { room: publicRoom(room), playerId: player.id });
   }
 
+  if (req.method === "POST" && parts[2] === "policy-vote") {
+    const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
+    const policy = policyVoteForPhase(phaseId);
+    const player = room.players.find((candidate) => candidate.id === body.player_id && !candidate.gameOver);
+    const option = policy?.options.find((candidate) => candidate.id === body.option_id);
+    if (!policy || !player || !option) return json(res, 400, { detail: "This policy vote is not available." });
+    room.policy_votes = room.policy_votes || {};
+    const state = room.policy_votes[phaseId] || { votes: {}, result: null };
+    if (!state.result?.resolved) {
+      state.votes[player.id] = option.id;
+      player.policyVotes = { ...(player.policyVotes || {}), [phaseId]: option.id };
+      await savePlayer(code, player);
+    }
+    const eligibleIds = room.players.filter((candidate) => !candidate.gameOver).map((candidate) => candidate.id);
+    state.result = resolvePolicyVote(policy, state.votes, eligibleIds);
+    room.policy_votes[phaseId] = state;
+    if (state.result.resolved && !state.applied) {
+      room.players = room.players.map((candidate) => {
+        if (candidate.gameOver) return candidate;
+        const impacted = applySharedImpact(candidate, policyImpactForPlayer(policy, state.result.winnerId, candidate));
+        const winningOption = policy.options.find((candidateOption) => candidateOption.id === state.result.winnerId);
+        return addPolicyHistory(impacted, { id: policy.id, title: winningOption.title, phaseId });
+      });
+      const winningOption = policy.options.find((candidateOption) => candidateOption.id === state.result.winnerId);
+      room.shared = {
+        ...(room.shared || {}),
+        activePolicy: {
+          id: policy.id,
+          title: winningOption.title,
+          detail: state.result.tied ? `${winningOption.detail} The vote tied, so the historical status quo prevailed.` : winningOption.detail,
+          phaseId,
+        },
+      };
+      state.applied = true;
+      applyCollapseChecks(room, phaseId, { allowGameOver: false });
+      await Promise.all(room.players.map((candidate) => savePlayer(code, candidate)));
+    }
+    room.updated_at = new Date().toISOString();
+    await saveRoom(room);
+    return json(res, 200, { room: publicRoom(room) });
+  }
+
   if (req.method === "POST" && parts[2] === "choices") {
     const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
+    const policy = policyVoteForPhase(phaseId);
+    if (policy && !room.policy_votes?.[phaseId]?.result?.resolved) {
+      return json(res, 409, { detail: "Every active family must vote on public policy before decisions open." });
+    }
     const playerIndex = room.players.findIndex((player) => player.id === body.player_id);
     if (playerIndex < 0) return json(res, 404, { detail: "Player not found in this room" });
     if (room.players[playerIndex].gameOver) return json(res, 200, { room: publicRoom(room) });
@@ -1264,7 +1362,9 @@ async function handleGameRequest(req, res) {
       room.players = await listPlayers(code);
       return json(res, 200, { room: publicRoom(room) });
     }
-    const updatedPlayer = applyChoices(room.players[playerIndex], selectedChoices, phaseId, { rushed });
+    const startingPlayer = room.players[playerIndex];
+    const updatedPlayer = applyChoices(startingPlayer, selectedChoices, phaseId, { rushed });
+    updatedPlayer.roundSnapshots = { ...(startingPlayer.roundSnapshots || {}), [phaseId]: metricSnapshot(startingPlayer) };
     updatedPlayer.choices = { ...(room.players[playerIndex].choices || {}), [phaseId]: selectedChoices };
     await savePlayer(code, updatedPlayer);
     for (let attempt = 0; attempt < 4; attempt += 1) {
