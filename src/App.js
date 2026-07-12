@@ -1812,6 +1812,7 @@ function App() {
                   phase={phase}
                   shared={shared}
                   playerCount={activeRoundPlayers.length || players.length}
+                  players={activeRoundPlayers}
                   family={activePlayer}
                   view={view}
                   selectedClaim={claimSelection}
@@ -2533,7 +2534,7 @@ function PlayerFamilyLedger({ family }) {
   );
 }
 
-function NewsTownHall({ phase, shared, playerCount, family, view, selectedClaim, submittedClaim, isBusy, onSelectClaim, onSubmitClaim, onResolveDemoClaims, showDecision, onDecision }) {
+function NewsTownHall({ phase, shared, playerCount, players, family, view, selectedClaim, submittedClaim, isBusy, onSelectClaim, onSubmitClaim, onResolveDemoClaims, showDecision, onDecision }) {
   return (
     <section className="news-town-hall">
       <div className="gd-news tabletop-news">
@@ -2543,6 +2544,8 @@ function NewsTownHall({ phase, shared, playerCount, family, view, selectedClaim,
       <TownHallCouncil
         shared={shared}
         playerCount={playerCount}
+        players={players}
+        phaseId={phase.id}
         family={family}
         view={view}
         selectedClaim={selectedClaim}
@@ -2614,10 +2617,10 @@ function Meters({ family }) {
 }
 
 const CLAIM_OPTIONS = [
-  ["work", "Compete for work", "Employment"],
-  ["relief", "Seek relief", "Immediate aid"],
-  ["community", "Support the community", "Shared protection"],
-  ["household", "Protect the household", "Family security"],
+  ["work", "Compete for work", "Employment", "action-search-any-work-bust-v2.png"],
+  ["relief", "Seek relief", "Immediate aid", "action-accept-relief-bust-v2.png"],
+  ["community", "Support the community", "Shared protection", "action-join-mutual-aid-bust-v2.png"],
+  ["household", "Protect the household", "Family security", "action-build-emergency-fund-boom-v2.png"],
 ];
 
 function familyExposure(family) {
@@ -2629,7 +2632,7 @@ function familyExposure(family) {
   return `${family.role}: ${risks[0][0]} is currently the household's greatest exposure at ${risks[0][1]}.`;
 }
 
-function TownHallCouncil({ shared, playerCount = 0, family, view, selectedClaim, submittedClaim, isBusy, onSelectClaim, onSubmitClaim, onResolveDemoClaims }) {
+function TownHallCouncil({ shared, playerCount = 0, players = [], phaseId, family, view, selectedClaim, submittedClaim, isBusy, onSelectClaim, onSubmitClaim, onResolveDemoClaims }) {
   const current = shared || {
     trust: 55,
     communityPot: 3,
@@ -2668,7 +2671,7 @@ function TownHallCouncil({ shared, playerCount = 0, family, view, selectedClaim,
       <div className="council-progress"><span>{townHall.claimsReceived} of {townHall.eligibleCount} priorities placed</span><i><b style={{ width: `${townHall.eligibleCount ? townHall.claimsReceived / townHall.eligibleCount * 100 : 0}%` }} /></i></div>
       <div className="council-body">
         <div className="council-claims" aria-label="Provisional priorities">
-          {CLAIM_OPTIONS.map(([id, title, focus]) => (
+          {CLAIM_OPTIONS.map(([id, title, focus, image]) => (
             <button
               type="button"
               className={`provisional-claim ${selection === id ? "selected" : ""}`}
@@ -2677,18 +2680,34 @@ function TownHallCouncil({ shared, playerCount = 0, family, view, selectedClaim,
               disabled={Boolean(submittedClaim) || (!canSubmit && !canResolveDemoClaims) || isBusy}
               aria-pressed={selection === id}
             >
-              <span>Intention</span><strong>{title}</strong>
-              <small>{townHall.resolved ? `${townHall.counts[id]} ${townHall.counts[id] === 1 ? "family" : "families"}` : `Focus: ${focus}`}</small>
+              <img src={asset(image)} alt="" />
+              <span>Intention</span>
+              <strong>{title}</strong>
+              <small>{townHall.resolved ? `${townHall.counts[id]} ${townHall.counts[id] === 1 ? "family" : "families"}` : focus}</small>
             </button>
           ))}
         </div>
-        <aside className="council-private-note">
-          <span>Private · family exposure</span>
-          <strong>{family?.name ? `${family.name} Family` : "Family notice"}</strong>
-          <p>{familyExposure(family)}</p>
-          <small>Claims are provisional and carry no penalty. Room totals reveal together.</small>
-        </aside>
       </div>
+      <aside className="council-private-note council-private-note-wide">
+        <div><span>Private · family exposure</span><strong>{family?.name ? `${family.name} Family` : "Family notice"}</strong></div>
+        <p>{familyExposure(family)}</p>
+        <small>Claims are provisional and carry no penalty. Room totals reveal together.</small>
+      </aside>
+      <section className="council-intention-roster" aria-label="Family intentions">
+        <div className="council-roster-heading"><span>Family intentions</span><small>Visible provisional claims</small></div>
+        <div className="council-roster-grid">
+          {players.map((player) => {
+            const claimId = player.provisionalClaims?.[phaseId];
+            const claimTitle = CLAIM_OPTIONS.find(([id]) => id === claimId)?.[1];
+            return (
+              <div className={claimId ? "has-claim" : "pending"} key={player.id}>
+                <span>{player.playerName || "Player"} · {player.name} Family</span>
+                <strong>{claimTitle || "Awaiting priority"}</strong>
+              </div>
+            );
+          })}
+        </div>
+      </section>
       {current.activePolicy && <div className="council-policy"><span>Policy in force</span><strong>{current.activePolicy.title}</strong><p>{current.activePolicy.detail}</p></div>}
       <footer className="council-footer">
         <details className="community-record">

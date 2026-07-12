@@ -137,13 +137,15 @@ describe("staged tabletop experience", () => {
   });
 
   test("keeps decisions locked until every family places a provisional claim", async () => {
+    const secondPlayer = { ...player, id: "player-2", name: "Novak", playerName: "Morgan", provisionalClaims: { postwar: "relief" } };
     window.localStorage.setItem("gd-game-state", JSON.stringify({
       ...savedPlayerState(),
+      players: [{ ...player, provisionalClaims: {} }, secondPlayer],
       shared: {
         ...room.shared,
         townHall: {
           claimsReceived: 0,
-          eligibleCount: 1,
+          eligibleCount: 2,
           resolved: false,
           counts: { work: 0, relief: 0, community: 0, household: 0 },
         },
@@ -157,7 +159,12 @@ describe("staged tabletop experience", () => {
     await act(async () => newsButton.click());
     expect(container.querySelector(".town-hall-council")).not.toBeNull();
     expect(container.querySelectorAll(".provisional-claim")).toHaveLength(4);
-    expect(container.textContent).toContain("0 of 1 priorities placed");
+    expect(container.querySelectorAll(".provisional-claim img")).toHaveLength(4);
+    expect(container.querySelector(".council-private-note-wide")).not.toBeNull();
+    expect(container.textContent).toContain("0 of 2 priorities placed");
+    expect(container.querySelector(".council-intention-roster")?.textContent).toContain("Morgan");
+    expect(container.querySelector(".council-intention-roster")?.textContent).toContain("Seek relief");
+    expect(container.querySelector(".council-intention-roster")?.textContent).toContain("Awaiting priority");
   });
 
   test("uses hopeful human artwork for boom action cards", async () => {
