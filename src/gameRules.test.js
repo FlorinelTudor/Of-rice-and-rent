@@ -5,6 +5,7 @@ const {
   communityOutcomeFor,
   consequenceWarningsFor,
   positiveImpactMultiplier,
+  policyFollowThroughImpact,
   policyVoteForPhase,
   resolvePolicyVote,
   scaledImpact,
@@ -53,6 +54,18 @@ describe("shared multiplayer rules", () => {
     expect(result.resolved).toBe(false);
     expect(result.votesReceived).toBe(1);
     expect(result.eligibleCount).toBe(2);
+  });
+
+  test("carries a reduced policy consequence into each of the next two phases", () => {
+    const policy = policyVoteForPhase("work_relief");
+    const favoredFamily = { role: "Rural tenant farmers" };
+
+    expect(policyFollowThroughImpact(policy, "direct_relief", favoredFamily)).toEqual({
+      food: 5,
+      health: 2,
+      hope: 2,
+      savings: 1,
+    });
   });
 
   test.each([

@@ -121,6 +121,24 @@ const ACTION_CARD_ART = {
   rival_call_in_debt: "action-rival-call-in-debt.png",
   rival_block_relief: "action-rival-block-relief.png",
 };
+const ACTION_CARD_ART_BY_ERA = {
+  boom: {
+    buy_radio_credit: "action-buy-radio-credit-boom-v2.png",
+    build_emergency_fund: "action-build-emergency-fund-boom-v2.png",
+    night_school: "action-night-school-boom-v2.png",
+    keep_cash: "action-keep-cash-boom-v2.png",
+    invest_stocks: "action-invest-stocks-boom-v2.png",
+    borrow_to_invest: "action-borrow-to-invest-boom-v2.png",
+  },
+  bust: {
+    sell_stocks_now: "action-sell-stocks-now-bust-v2.png",
+    search_any_work: "action-search-any-work-bust-v2.png",
+    cut_food_rent: "action-cut-food-rent-bust-v2.png",
+    join_mutual_aid: "action-join-mutual-aid-bust-v2.png",
+    apply_public_works: "action-apply-public-works-bust-v2.png",
+    accept_relief: "action-accept-relief-bust-v2.png",
+  },
+};
 const ACTION_CARD_IMPACTS = {
   factory_overtime: { savings: 15, health: -8, stability: 5 },
   shopkeeper_extend_credit: { reputation: 13, hope: 7, savings: -12 },
@@ -848,6 +866,18 @@ function choiceTone(choiceId) {
   if (choiceId === "contribute_community_pot" || COOPERATIVE_CHOICES.has(choiceId)) return "cooperate";
   if (BETRAYAL_CHOICES.has(choiceId)) return "betray";
   return "neutral";
+}
+
+function choiceEraForPhase(phaseId) {
+  if (["early_boom", "speculation"].includes(phaseId)) return "boom";
+  if (["recession_1921", "crash", "deepening", "bank_holiday", "second"].includes(phaseId)) return "bust";
+  if (["work_relief", "defense_shift", "recovery"].includes(phaseId)) return "recovery";
+  return "neutral";
+}
+
+function actionCardArtFor(choiceId, phaseId) {
+  const era = choiceEraForPhase(phaseId);
+  return ACTION_CARD_ART_BY_ERA[era]?.[choiceId] || ACTION_CARD_ART[choiceId];
 }
 
 function choiceGridShape(count) {
@@ -1802,18 +1832,21 @@ function App() {
                         />
                       )}
                       <div
-                        className={`gd-choice-grid choice-layout-${choiceGridShape(activeChoices.length).layout}`}
+                        className={`gd-choice-grid choice-hand choice-era-${choiceEraForPhase(phase.id)} choice-layout-${choiceGridShape(activeChoices.length).layout}`}
                         data-choice-count={activeChoices.length}
                         style={{
                           "--choice-columns": choiceGridShape(activeChoices.length).columns,
                           "--choice-rows": choiceGridShape(activeChoices.length).rows,
+                          "--card-count": activeChoices.length,
+                          "--fan-overlap": `${Math.min(130, Math.max(36, 36 + Math.max(0, activeChoices.length - 7) * 12))}px`,
                         }}
                       >
                         {activeChoices.map(([id, title, detail], index) => {
                           const blockedByWorkRule = !selected.includes(id) && WORK_CHOICES.has(id) && selected.some((item) => WORK_CHOICES.has(item));
                           const blockedBySabotageRule = !selected.includes(id) && SABOTAGE_CHOICE_IDS.includes(id) && selected.some((item) => SABOTAGE_CHOICE_IDS.includes(item));
-                          const cardArt = ACTION_CARD_ART[id];
+                          const cardArt = actionCardArtFor(id, phase.id);
                           const chips = choiceImpactChips(id);
+                          const edgeHoverShift = index === 0 ? 58 : index === activeChoices.length - 1 ? -58 : index === 1 ? 22 : index === activeChoices.length - 2 ? -22 : 0;
                           return (
                             <button
                               key={id}
@@ -1825,7 +1858,13 @@ function App() {
                               onClick={() => toggleChoice(id)}
                               disabled={blockedByWorkRule || blockedBySabotageRule}
                               aria-pressed={selected.includes(id)}
-                              style={{ "--card-index": index }}
+                              style={{
+                                "--card-index": index,
+                                "--fan-position": index - (activeChoices.length - 1) / 2,
+                                "--fan-rotation": `${(index - (activeChoices.length - 1) / 2) * 2.2}deg`,
+                                "--fan-rise": `${Math.abs(index - (activeChoices.length - 1) / 2) * 5}px`,
+                                "--fan-hover-shift": `${edgeHoverShift}px`,
+                              }}
                               title={blockedByWorkRule ? "Choose only one work action this round." : blockedBySabotageRule ? "Choose only one sabotage action this round." : undefined}
                             >
                               {cardArt && <img className="choice-card-art" src={asset(cardArt)} alt="" />}

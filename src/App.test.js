@@ -110,7 +110,13 @@ describe("staged tabletop experience", () => {
     const choiceGrid = container.querySelector(".gd-choice-grid");
     expect(choiceGrid.dataset.choiceCount).toBe(String(choiceGrid.querySelectorAll("button").length));
     expect(choiceGrid.classList.contains("choice-layout-standard")).toBe(true);
+    expect(choiceGrid.classList.contains("choice-hand")).toBe(true);
+    expect(choiceGrid.classList.contains("choice-era-neutral")).toBe(true);
     expect(choiceGrid.querySelectorAll("button").length).toBeGreaterThanOrEqual(7);
+    expect(choiceButton.style.getPropertyValue("--fan-position")).not.toBe("");
+    const choiceButtons = choiceGrid.querySelectorAll("button");
+    expect(choiceButtons[0].style.getPropertyValue("--fan-hover-shift")).toBe("58px");
+    expect(choiceButtons[choiceButtons.length - 1].style.getPropertyValue("--fan-hover-shift")).toBe("-58px");
     expect(choiceGrid.querySelectorAll("em")).toHaveLength(0);
     expect(choiceButton.textContent).toMatch(/\+ Food \d+/);
     await act(async () => choiceButton.click());
@@ -128,6 +134,38 @@ describe("staged tabletop experience", () => {
 
     expect(container.querySelector(".community-record")).not.toBeNull();
     expect(container.querySelector(".community-record summary")?.textContent).toContain("Town record");
+  });
+
+  test("uses hopeful human artwork for boom action cards", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify({ ...savedPlayerState(), phaseIndex: 3 }));
+    await act(async () => root.render(<App />));
+
+    const decisionButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Make a decision")
+    );
+    await act(async () => decisionButton.click());
+    const investCard = Array.from(container.querySelectorAll(".gd-choice-grid button")).find(
+      (button) => button.textContent.includes("Invest savings in stocks")
+    );
+
+    expect(container.querySelector(".gd-choice-grid").classList.contains("choice-era-boom")).toBe(true);
+    expect(investCard.querySelector("img").getAttribute("src")).toContain("action-invest-stocks-boom-v2.png");
+  });
+
+  test("uses distressed human artwork for bust action cards", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify({ ...savedPlayerState(), phaseIndex: 4 }));
+    await act(async () => root.render(<App />));
+
+    const decisionButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Make a decision")
+    );
+    await act(async () => decisionButton.click());
+    const sellCard = Array.from(container.querySelectorAll(".gd-choice-grid button")).find(
+      (button) => button.textContent.includes("Sell remaining stocks")
+    );
+
+    expect(container.querySelector(".gd-choice-grid").classList.contains("choice-era-bust")).toBe(true);
+    expect(sellCard.querySelector("img").getAttribute("src")).toContain("action-sell-stocks-now-bust-v2.png");
   });
 
   test("shows choice consequences before a repeated action is locked in", async () => {

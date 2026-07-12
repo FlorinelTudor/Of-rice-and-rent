@@ -7,6 +7,7 @@ const {
   communityOutcomeFor,
   metricDeltas,
   metricSnapshot,
+  policyFollowThroughImpact,
   policyImpactForPlayer,
   policyVoteForPhase,
   PATTERN_CHOICE_LIMIT,
@@ -744,11 +745,30 @@ function applyUnemploymentShock(room, phaseId) {
 }
 
 function applyPhaseEntryEvents(room, phaseId) {
-  if (typeof room.shared?.activePolicy?.expiresAfterPhaseIndex === "number" && room.phase_index > room.shared.activePolicy.expiresAfterPhaseIndex) {
-    room.shared = { ...(room.shared || {}), activePolicy: null };
-  }
   room.entry_events = room.entry_events || {};
   if (room.entry_events[phaseId]) return;
+  const activePolicies = (room.shared?.activePolicies || [])
+    .filter((activePolicy) => room.phase_index <= activePolicy.expiresAfterPhaseIndex)
+    .map((activePolicy) => {
+      if (
+        !activePolicy.winnerId ||
+        room.phase_index <= activePolicy.enactedAtPhaseIndex ||
+        (activePolicy.followThroughApplied || []).includes(room.phase_index)
+      ) return activePolicy;
+      const votedPolicy = policyVoteForPhase(activePolicy.phaseId);
+      room.players = room.players.map((player) => player.gameOver
+        ? player
+        : applySharedImpact(player, policyFollowThroughImpact(votedPolicy, activePolicy.winnerId, player)));
+      return {
+        ...activePolicy,
+        followThroughApplied: [...(activePolicy.followThroughApplied || []), room.phase_index],
+      };
+    });
+  room.shared = {
+    ...(room.shared || {}),
+    activePolicies,
+    activePolicy: activePolicies[activePolicies.length - 1] || null,
+  };
   const policyVote = policyVoteForPhase(phaseId);
   const policy = policyVote ? null : POLICY_EFFECTS[phaseId];
   if (policy) {
@@ -919,6 +939,7 @@ function resolveSharedRound(room, phaseId) {
 
   const trustDelta = cooperate.length * 4 - betray.length * (room.hard_mode ? 22 : 18) + (communityOutcome.tier === "surplus" ? 7 : potMetNeed ? 4 : -8) - Math.max(0, work.length - capacity.workSlots) * 2;
   room.shared = {
+    ...(room.shared || {}),
     trust: clamp((room.shared?.trust ?? 55) + trustDelta),
     communityPot: Math.max(0, communityPot - communityOutcome.spend),
     lastRound: `${cooperate.length} helped the community, ${betray.length} stole from the shared pool. ${
@@ -1068,15 +1089,20 @@ app.post("/api/game/rooms/:roomCode/policy-vote", (req, res) => {
       return addPolicyHistory(impacted, { id: policy.id, title: winningOption.title, phaseId });
     });
     const winningOption = policy.options.find((candidateOption) => candidateOption.id === state.result.winnerId);
-    room.shared = {
-      ...(room.shared || {}),
-      activePolicy: {
+    const enactedPolicy = {
         id: policy.id,
         title: winningOption.title,
         detail: state.result.tied ? `${winningOption.detail} The vote tied, so the historical status quo prevailed.` : winningOption.detail,
         phaseId,
+        winnerId: state.result.winnerId,
+        enactedAtPhaseIndex: room.phase_index,
+        followThroughApplied: [],
         expiresAfterPhaseIndex: Math.min(PHASE_IDS.length - 2, room.phase_index + 2),
-      },
+      };
+    room.shared = {
+      ...(room.shared || {}),
+      activePolicies: [...(room.shared?.activePolicies || []), enactedPolicy],
+      activePolicy: enactedPolicy,
     };
     state.applied = true;
     applyCollapseChecks(room, phaseId, { allowGameOver: false });
@@ -1112,14 +1138,26 @@ app.post("/api/game/rooms/:roomCode/policy-demo-votes", (req, res) => {
   state.result = resolvePolicyVote(policy, state.votes, eligibleIds);
   room.policy_votes[phaseId] = state;
   if (state.result.resolved && !state.applied) {
+    const winningOption = policy.options.find((candidateOption) => candidateOption.id === state.result.winnerId);
     room.players = room.players.map((player) => {
       if (player.gameOver) return player;
       const impacted = applySharedImpact(player, policyImpactForPlayer(policy, state.result.winnerId, player));
-      return addPolicyHistory(impacted, { id: policy.id, title: option.title, phaseId });
+      return addPolicyHistory(impacted, { id: policy.id, title: winningOption.title, phaseId });
     });
+    const enactedPolicy = {
+        id: policy.id,
+        title: winningOption.title,
+        detail: state.result.tied ? `${winningOption.detail} The vote tied, so the historical status quo prevailed.` : winningOption.detail,
+        phaseId,
+        winnerId: state.result.winnerId,
+        enactedAtPhaseIndex: room.phase_index,
+        followThroughApplied: [],
+        expiresAfterPhaseIndex: Math.min(PHASE_IDS.length - 2, room.phase_index + 2),
+      };
     room.shared = {
       ...(room.shared || {}),
-      activePolicy: { id: policy.id, title: option.title, detail: state.result.tied ? `${option.detail} The vote tied, so the historical status quo prevailed.` : option.detail, phaseId, expiresAfterPhaseIndex: Math.min(PHASE_IDS.length - 2, room.phase_index + 2) },
+      activePolicies: [...(room.shared?.activePolicies || []), enactedPolicy],
+      activePolicy: enactedPolicy,
     };
     state.applied = true;
     applyCollapseChecks(room, phaseId, { allowGameOver: false });

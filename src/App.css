@@ -30,7 +30,7 @@
 .gd-grid,
 .gd-alert,
 .gd-join {
-  width: min(1180px, 100%);
+  width: min(1380px, 100%);
   margin-inline: auto;
 }
 
@@ -3595,6 +3595,72 @@
 .tabletop-surface .choice-layout-dense .choice-effects { padding-inline: 6px; }
 .tabletop-surface .choice-layout-dense .effect-chip { font-size: 8px; }
 .tabletop-surface .choice-layout-dense .choice-selection-stamp { top: 24px; width: 46px; height: 46px; font-size: 7px; }
+
+@media (min-width: 821px) {
+  .tabletop-surface .gd-choice-grid.choice-hand {
+    top: auto;
+    right: 1.5%;
+    bottom: 58px;
+    left: 1.5%;
+    display: flex;
+    height: 385px;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 0;
+    overflow: visible;
+    padding: 0 14px;
+  }
+
+  .tabletop-surface .gd-choice-grid.choice-hand button {
+    position: relative;
+    z-index: calc(10 + var(--card-index));
+    display: grid;
+    flex: 0 0 clamp(150px, 15vw, 190px);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    width: clamp(150px, 15vw, 190px);
+    height: 326px;
+    margin-left: calc(-1 * var(--fan-overlap));
+    overflow: hidden;
+    border: 3px solid #c4a866;
+    border-radius: 7px;
+    background: #f4e7c8;
+    box-shadow: 0 16px 28px rgba(24, 15, 8, .52), inset 0 0 0 3px rgba(255, 248, 224, .62);
+    transform: translateY(var(--fan-rise)) rotate(var(--fan-rotation));
+    transform-origin: 50% 115%;
+    transition: transform .22s cubic-bezier(.2, .82, .2, 1), filter .22s ease, box-shadow .22s ease, border-color .22s ease;
+    animation: collectibleDeal .46s calc(var(--card-index) * 45ms) ease-out both;
+  }
+
+  .tabletop-surface .gd-choice-grid.choice-hand button:first-child { margin-left: 0; }
+  .tabletop-surface .gd-choice-grid.choice-hand .choice-card-art { grid-row: 2; height: 100%; min-height: 0; object-fit: cover; }
+  .tabletop-surface .gd-choice-grid.choice-hand button strong { grid-row: 1; min-height: 48px; padding: 9px 9px 6px; font-size: 17px; line-height: 1.02; }
+  .tabletop-surface .gd-choice-grid.choice-hand .choice-effects { grid-row: 3; padding: 8px; background: rgba(248, 235, 204, .94); }
+  .tabletop-surface .gd-choice-grid.choice-hand .effect-chip { min-height: 21px; padding: 4px 6px; font-size: 9px; }
+
+  .tabletop-surface .gd-choice-grid.choice-hand button:hover:not(:disabled),
+  .tabletop-surface .gd-choice-grid.choice-hand button:focus-visible:not(:disabled) {
+    z-index: 80;
+    border-color: #a9d653;
+    filter: saturate(1.12) contrast(1.05);
+    box-shadow: 0 0 0 4px #d7ef8f, 0 0 28px rgba(150, 202, 67, .82), 0 28px 42px rgba(19, 11, 5, .62);
+    transform: translateX(var(--fan-hover-shift)) translateY(-76px) rotate(0) scale(1.16);
+    outline: none;
+  }
+
+  .tabletop-surface .gd-choice-grid.choice-hand button:has(~ button:hover) { transform: translateX(-13px) translateY(var(--fan-rise)) rotate(var(--fan-rotation)); }
+  .tabletop-surface .gd-choice-grid.choice-hand button:hover ~ button { transform: translateX(13px) translateY(var(--fan-rise)) rotate(var(--fan-rotation)); }
+  .tabletop-surface .gd-choice-grid.choice-hand button.selected { z-index: 60; transform: translateY(-30px) rotate(0) scale(1.04); }
+
+  .tabletop-surface .gd-choice-grid.choice-era-boom button { border-color: #b99a48; background: #f5e5b8; }
+  .tabletop-surface .gd-choice-grid.choice-era-boom .choice-card-art { filter: saturate(1.12) brightness(1.04) contrast(1.02); }
+  .tabletop-surface .gd-choice-grid.choice-era-bust button { border-color: #76584b; background: #d8c5aa; box-shadow: 0 16px 28px rgba(18, 14, 12, .58), inset 0 0 0 3px rgba(226, 210, 181, .48); }
+  .tabletop-surface .gd-choice-grid.choice-era-bust .choice-card-art { filter: saturate(.7) sepia(.16) brightness(.82) contrast(1.08); }
+  .tabletop-surface .gd-choice-grid.choice-era-bust .choice-effects { background: rgba(218, 201, 174, .96); }
+  .tabletop-surface .gd-choice-grid.choice-era-recovery button { border-color: #71826b; background: #e1dfc2; }
+  .tabletop-surface .gd-choice-grid.choice-era-recovery .choice-card-art { filter: saturate(.9) brightness(.98); }
+}
+
+@keyframes collectibleDeal { from { opacity: 0; } to { opacity: 1; } }
 
 .tabletop-surface .telegram-inbox { display: grid; place-items: center; }
 .telegram-sheet {

@@ -229,7 +229,7 @@ async function assertRematchJoinLink(baseUrl) {
   for (let round = 0; round < phaseChoices.length; round += 1) {
     state = await completePolicyVote(baseUrl, roomCode, state, { tie: state.room.shared?.policyVote?.phaseId === "bank_holiday" });
     await Promise.all(
-      state.room.players.map((player) =>
+      state.room.players.filter((player) => !player.gameOver).map((player) =>
         request(baseUrl, `/rooms/${roomCode}/choices`, {
           method: "POST",
           body: JSON.stringify({ player_id: player.id, choices: phaseChoices[round] }),

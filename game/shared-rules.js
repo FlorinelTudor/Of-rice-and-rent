@@ -229,6 +229,14 @@ function policyImpactForPlayer(policy, winnerId, player) {
   return favored ? { ...option.impact, ...mergeImpacts(option.impact, option.favoredImpact) } : { ...option.impact };
 }
 
+function policyFollowThroughImpact(policy, winnerId, player) {
+  return Object.fromEntries(
+    Object.entries(policyImpactForPlayer(policy, winnerId, player))
+      .map(([key, value]) => [key, Math.round(value * 0.35)])
+      .filter(([, value]) => value !== 0)
+  );
+}
+
 const RECEIPT_METRICS = ["food", "health", "savings", "debt", "hope", "education", "stability", "bankTrust", "reputation"];
 
 function metricSnapshot(player) {
@@ -261,6 +269,7 @@ module.exports = {
   metricDeltas,
   metricSnapshot,
   policyImpactForPlayer,
+  policyFollowThroughImpact,
   policyVoteForPhase,
   positiveImpactMultiplier,
   resolvePolicyVote,
