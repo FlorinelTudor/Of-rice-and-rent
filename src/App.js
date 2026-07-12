@@ -305,7 +305,7 @@ const phases = [
     years: "1919-1920",
     title: "Coming Home to a Changed Economy",
     image: "postwar-market-conditions.png",
-    newsImage: "news-postwar.png",
+    newsImage: "01-troops-return.png",
     news: "War orders end as prices swing",
     summary: "Factories lose wartime orders while families face high prices, uncertain hours, and a peacetime economy still finding its footing.",
     conditions: [["Jobs", "Unstable", "warn"], ["Prices", "Volatile", "warn"], ["Bank trust", "Steady", "good"], ["Credit", "Cautious", "neutral"]],
@@ -361,7 +361,7 @@ const phases = [
     years: "1925-1928",
     title: "Easy Money and Big Promises",
     image: "speculation-market.png",
-    newsImage: "news-boom.png",
+    newsImage: "02-credit-sales.png",
     news: "Credit boom lifts Main Street",
     summary: "Stocks, installment plans, and confident headlines make the future feel expandable. Families choose how far to lean in.",
     conditions: [["Stocks", "Rising", "good"], ["Credit", "Very easy", "good"], ["Confidence", "Bright", "good"], ["Risk", "Hidden", "warn"]],
@@ -380,7 +380,7 @@ const phases = [
     years: "1929",
     title: "A Sudden Break",
     image: "crash-market-pressure.png",
-    newsImage: "news-crash.png",
+    newsImage: "03-market-break.png",
     news: "Market falls as bank fears spread",
     summary: "Stocks plunge and confidence turns quickly. Families with savings, debt, or stock exposure must decide what to protect first.",
     conditions: [["Stocks", "Falling", "bad"], ["Bank confidence", "Falling", "bad"], ["Credit", "Tight", "bad"], ["Jobs", "At risk", "warn"]],
@@ -417,7 +417,7 @@ const phases = [
     years: "1933",
     title: "Banks Reopen and Relief Begins",
     image: "new-deal-market-conditions.png",
-    newsImage: "news-newdeal.png",
+    newsImage: "04-banks-reopen.png",
     news: "Banks reopen as work programs begin",
     summary: "Bank reforms and relief agencies change the options available to families, but trust has to be rebuilt.",
     conditions: [["Unemployment", "Severe", "bad"], ["Bank confidence", "Stabilizing", "good"], ["Credit", "Cautious", "neutral"], ["Relief", "Expanding", "good"]],
@@ -455,7 +455,7 @@ const phases = [
     years: "1937-1938",
     title: "Recovery Stumbles",
     image: "recovery-stumbles-market.png",
-    newsImage: "public-news-1937-newspaper.png",
+    newsImage: "05-recovery-stalls.png",
     news: "Recovery slows as jobless rise again",
     summary: "Policy changes, business caution, and weak demand contribute to another downturn.",
     conditions: [["Unemployment", "Rising again", "bad"], ["Bank confidence", "Improved", "good"], ["Credit", "Cautious", "neutral"], ["Relief", "Contested", "warn"]],
@@ -493,7 +493,7 @@ const phases = [
     years: "1941-1942",
     title: "Recovery and Mobilization",
     image: "final-recovery-market.png",
-    newsImage: "news-recovery.png",
+    newsImage: "06-war-declared.png",
     news: "Factories hire as orders surge",
     summary: "The long crisis gives way to mobilization, though not every family recovers equally.",
     conditions: [["Unemployment", "Falling", "good"], ["Bank confidence", "Recovering", "good"], ["Savings", "Rebuilding", "good"], ["Public support", "Shifting", "neutral"]],
@@ -1985,12 +1985,20 @@ function PolicyVoteModal({ policy, view, selectedOptionId, submittedOptionId, is
   return (
     <div className="private-notice-backdrop policy-vote-backdrop" role="presentation">
       <section className="policy-vote-modal" role="dialog" aria-modal="true" aria-labelledby="policy-vote-title">
-        <img className="policy-ballot-art" src={asset("public-policy-ballot.png")} alt="" />
-        <div className="policy-ballot-heading">
-          <p className="gd-kicker">Public Policy Ballot</p>
-          <span className="policy-secret-stamp">Secret vote</span>
+        <div className="policy-dossier-header">
+          <div>
+            <p className="gd-kicker">Federal Policy Dossier</p>
+            <span className="policy-dossier-file">Filed for the town meeting · {policy.phaseId?.replaceAll("_", " ")}</span>
+          </div>
+          <span className="policy-secret-stamp">Secret ballot</span>
         </div>
         <h2 id="policy-vote-title">{policy.resolved ? "The town has decided" : policy.title}</h2>
+        {!policy.resolved && (
+          <div className="policy-ballot-progress" aria-label={`${policy.votesReceived} of ${policy.eligibleCount} ballots sealed`}>
+            <span><b>{policy.votesReceived}</b> of <b>{policy.eligibleCount}</b> ballots sealed</span>
+            <span>Anonymous until every family votes</span>
+          </div>
+        )}
         {policy.resolved ? (
           <>
             <div className="policy-result-sheet">
@@ -2009,18 +2017,22 @@ function PolicyVoteModal({ policy, view, selectedOptionId, submittedOptionId, is
         ) : submittedOptionId || (view === "host" && !canResolveDemoVotes) ? (
           <div className="policy-waiting">
             <div className="policy-sealed-ballot">Ballot sealed</div>
-            <h3>{policy.votesReceived}/{policy.eligibleCount} families have voted</h3>
+            <h3>Your paper is in the box</h3>
             <p>{view === "host" ? "The host does not vote. Each player family must cast its ballot from that player’s screen." : "Your vote is recorded. Votes remain anonymous until every active family has answered."}</p>
           </div>
         ) : (
           <>
-            <p>{canResolveDemoVotes ? `Choose the policy that ${policy.demoVotesRemaining} demo ${policy.demoVotesRemaining === 1 ? "family will" : "families will"} support. Real family votes remain private and required.` : policy.detail}</p>
+            <p className="policy-ballot-brief">{canResolveDemoVotes ? `Choose the policy that ${policy.demoVotesRemaining} demo ${policy.demoVotesRemaining === 1 ? "family will" : "families will"} support. Real family votes remain private and required.` : policy.detail}</p>
             <div className="policy-option-grid">
-              {policy.options.map((option) => (
+              {policy.options.map((option, index) => (
                 <button key={option.id} className={`policy-option ${selectedOptionId === option.id ? "selected" : ""}`} onClick={() => onSelect(option.id)} disabled={isBusy} aria-pressed={selectedOptionId === option.id}>
-                  <span>{option.historical || "Alternative proposal"}</span>
+                  <span className="policy-option-meta">
+                    <b className="policy-option-number">Proposal {String.fromCharCode(65 + index)}</b>
+                    <em>{option.historical || "Alternative proposal"}</em>
+                  </span>
                   <strong>{option.title}</strong>
                   <p>{option.detail}</p>
+                  <span className="policy-ballot-mark" aria-hidden="true">{selectedOptionId === option.id ? "✓ Ballot marked" : "Mark this proposal"}</span>
                 </button>
               ))}
             </div>

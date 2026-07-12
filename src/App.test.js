@@ -306,13 +306,17 @@ describe("staged tabletop experience", () => {
     await act(async () => jest.advanceTimersByTime(351));
 
     expect(container.querySelector(".policy-vote-modal")).not.toBeNull();
-    expect(container.textContent).toContain("Secret vote");
+    expect(container.textContent).toContain("Secret ballot");
     expect(container.textContent).toContain("Historical status quo");
-    expect(container.querySelector(".policy-ballot-art")).not.toBeNull();
+    expect(container.querySelector(".policy-ballot-art")).toBeNull();
+    expect(container.querySelector(".policy-dossier-header")).not.toBeNull();
+    expect(container.querySelector(".policy-ballot-progress")?.textContent).toContain("0 of 1 ballots sealed");
     expect(container.querySelectorAll(".policy-option")).toHaveLength(2);
+    expect(container.querySelectorAll(".policy-option-number")[0].textContent).toBe("Proposal A");
     expect(container.querySelector(".policy-submit").disabled).toBe(true);
     await act(async () => container.querySelectorAll(".policy-option")[0].click());
     expect(container.querySelector(".policy-submit").disabled).toBe(false);
+    expect(container.querySelectorAll(".policy-option")[0].textContent).toContain("Ballot marked");
     expect(container.textContent).toContain("Submit secret vote");
     jest.useRealTimers();
   });
