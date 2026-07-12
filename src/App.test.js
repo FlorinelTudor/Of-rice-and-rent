@@ -136,6 +136,30 @@ describe("staged tabletop experience", () => {
     expect(container.querySelector(".community-record summary")?.textContent).toContain("Town record");
   });
 
+  test("keeps decisions locked until every family places a provisional claim", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      shared: {
+        ...room.shared,
+        townHall: {
+          claimsReceived: 0,
+          eligibleCount: 1,
+          resolved: false,
+          counts: { work: 0, relief: 0, community: 0, household: 0 },
+        },
+      },
+    }));
+    await act(async () => root.render(<App />));
+
+    const newsButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent.includes("News & Town Hall"));
+    const decisionButton = Array.from(container.querySelectorAll("button")).find((button) => button.textContent.includes("Make a decision"));
+    expect(decisionButton.disabled).toBe(true);
+    await act(async () => newsButton.click());
+    expect(container.querySelector(".town-hall-council")).not.toBeNull();
+    expect(container.querySelectorAll(".provisional-claim")).toHaveLength(4);
+    expect(container.textContent).toContain("0 of 1 priorities placed");
+  });
+
   test("uses hopeful human artwork for boom action cards", async () => {
     window.localStorage.setItem("gd-game-state", JSON.stringify({ ...savedPlayerState(), phaseIndex: 3 }));
     await act(async () => root.render(<App />));
@@ -423,7 +447,7 @@ describe("staged tabletop experience", () => {
       (button) => button.textContent.includes("News & Town Hall")
     );
     await act(async () => newsButton.click());
-    expect(container.querySelectorAll(".community-panel")).toHaveLength(1);
+    expect(container.querySelectorAll(".town-hall-council")).toHaveLength(1);
   });
 
   test("lets a host with an assigned family open decisions on the tabletop", async () => {

@@ -12,6 +12,7 @@ const {
   policyVoteForPhase,
   PATTERN_CHOICE_LIMIT,
   positiveImpactMultiplier,
+  provisionalClaimSummary,
   REPEAT_CHOICE_LIMIT,
   resolvePolicyVote,
   scaledImpact,
@@ -19,6 +20,7 @@ const {
 const path = require("path");
 
 const MAX_PLAYERS = 8;
+const PROVISIONAL_CLAIMS = new Set(["work", "relief", "community", "household"]);
 const BETRAYAL_POT_DRAIN = 3;
 const BETRAYAL_EXPLOIT_MARKERS = 2;
 const BETRAYAL_REPUTATION_HIT = -24;
@@ -809,6 +811,8 @@ function sharedSnapshot(room, phaseId) {
   const capacity = phaseCapacity(phaseId, playerCount, room.scenario_id, room.hard_mode);
   const policy = policyVoteForPhase(phaseId);
   const policyState = room.policy_votes?.[phaseId] || null;
+  const eligibleIds = room.players.filter((player) => !player.gameOver).map((player) => player.id);
+  const townHall = provisionalClaimSummary(room.town_hall_claims?.[phaseId] || {}, eligibleIds);
   return {
     trust: room.shared?.trust ?? 55,
     phaseStartedAt: room.phase_started_at || null,
@@ -818,6 +822,11 @@ function sharedSnapshot(room, phaseId) {
     lastShock: room.shared?.lastShock || null,
     scenarioEvent: room.shared?.scenarioEvent || null,
     eventVariant: eventVariantForRoom(room, phaseId),
+    townHall: {
+      ...townHall,
+      demoClaimsRemaining: room.players.filter((player) => player.isDemo && !player.gameOver && !room.town_hall_claims?.[phaseId]?.[player.id]).length,
+      dangerCount: room.players.filter((player) => !player.gameOver && Math.min(player.food, player.health, player.hope, player.stability) <= 20).length,
+    },
     policyVote: policy ? {
       id: policy.id,
       phaseId,
@@ -1166,6 +1175,47 @@ app.post("/api/game/rooms/:roomCode/policy-demo-votes", (req, res) => {
   res.json({ room: publicRoom(room) });
 });
 
+app.post("/api/game/rooms/:roomCode/town-hall-claim", (req, res) => {
+  const room = getRoom(req, res);
+  if (!room) return;
+  const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
+  const claim = String(req.body.claim || "");
+  const player = room.players.find((candidate) => candidate.id === req.body.player_id && !candidate.gameOver);
+  if (!player || !PROVISIONAL_CLAIMS.has(claim) || phaseId === "results") {
+    res.status(400).json({ detail: "This provisional claim is not available." });
+    return;
+  }
+  room.town_hall_claims = room.town_hall_claims || {};
+  room.town_hall_claims[phaseId] = room.town_hall_claims[phaseId] || {};
+  room.town_hall_claims[phaseId][player.id] = claim;
+  player.provisionalClaims = { ...(player.provisionalClaims || {}), [phaseId]: claim };
+  room.updated_at = new Date().toISOString();
+  res.json({ room: publicRoom(room) });
+});
+
+app.post("/api/game/rooms/:roomCode/town-hall-demo-claims", (req, res) => {
+  const room = getRoom(req, res);
+  if (!room) return;
+  if (!req.body.host_token || req.body.host_token !== room.host_token) {
+    res.status(403).json({ detail: "Only the host can record demo priorities." });
+    return;
+  }
+  const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
+  const claim = String(req.body.claim || "");
+  if (!PROVISIONAL_CLAIMS.has(claim) || phaseId === "results") {
+    res.status(400).json({ detail: "This provisional claim is not available." });
+    return;
+  }
+  room.town_hall_claims = room.town_hall_claims || {};
+  room.town_hall_claims[phaseId] = room.town_hall_claims[phaseId] || {};
+  room.players.filter((player) => player.isDemo && !player.gameOver).forEach((player) => {
+    room.town_hall_claims[phaseId][player.id] = claim;
+    player.provisionalClaims = { ...(player.provisionalClaims || {}), [phaseId]: claim };
+  });
+  room.updated_at = new Date().toISOString();
+  res.json({ room: publicRoom(room) });
+});
+
 app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
   const room = getRoom(req, res);
   if (!room) return;
@@ -1173,6 +1223,12 @@ app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
   const policy = policyVoteForPhase(phaseId);
   if (policy && !room.policy_votes?.[phaseId]?.result?.resolved) {
     res.status(409).json({ detail: "Every active family must vote on public policy before decisions open." });
+    return;
+  }
+  const eligibleIds = room.players.filter((player) => !player.gameOver).map((player) => player.id);
+  const townHall = provisionalClaimSummary(room.town_hall_claims?.[phaseId] || {}, eligibleIds);
+  if (phaseId !== "results" && !townHall.resolved) {
+    res.status(409).json({ detail: "Every active family must place a provisional Town Hall priority before decisions open." });
     return;
   }
   const index = room.players.findIndex((player) => player.id === req.body.player_id);

@@ -134,6 +134,7 @@ const POLICY_VOTES = {
 const MIN_THINKING_TIME_MS = 5000;
 const REPEAT_CHOICE_LIMIT = 3;
 const PATTERN_CHOICE_LIMIT = 5;
+const PROVISIONAL_CLAIMS = ["work", "relief", "community", "household"];
 
 function choicePattern(choice, actionDynamics = {}) {
   const dynamics = actionDynamics[choice] || [];
@@ -187,6 +188,21 @@ function consequenceWarningsFor(family = {}, choices = [], { elapsedMs = MIN_THI
 
 function policyVoteForPhase(phaseId) {
   return POLICY_VOTES[phaseId] || null;
+}
+
+function provisionalClaimSummary(claims = {}, eligibleIds = []) {
+  const eligible = new Set(eligibleIds);
+  const counts = Object.fromEntries(PROVISIONAL_CLAIMS.map((claim) => [claim, 0]));
+  Object.entries(claims).forEach(([playerId, claim]) => {
+    if (eligible.has(playerId) && Object.hasOwn(counts, claim)) counts[claim] += 1;
+  });
+  const claimsReceived = Object.values(counts).reduce((sum, count) => sum + count, 0);
+  return {
+    counts,
+    claimsReceived,
+    eligibleCount: eligible.size,
+    resolved: eligible.size > 0 && claimsReceived >= eligible.size,
+  };
 }
 
 function resolvePolicyVote(policy, votes = {}, eligibleIds = []) {
@@ -272,6 +288,7 @@ module.exports = {
   policyFollowThroughImpact,
   policyVoteForPhase,
   positiveImpactMultiplier,
+  provisionalClaimSummary,
   resolvePolicyVote,
   scaledImpact,
 };

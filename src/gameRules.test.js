@@ -6,6 +6,7 @@ const {
   consequenceWarningsFor,
   positiveImpactMultiplier,
   policyFollowThroughImpact,
+  provisionalClaimSummary,
   policyVoteForPhase,
   resolvePolicyVote,
   scaledImpact,
@@ -66,6 +67,16 @@ describe("shared multiplayer rules", () => {
       hope: 2,
       savings: 1,
     });
+  });
+
+  test("summarizes provisional claims only after every active family responds", () => {
+    expect(provisionalClaimSummary({ a: "work", b: "relief", retired: "community" }, ["a", "b"])).toEqual({
+      counts: { work: 1, relief: 1, community: 0, household: 0 },
+      claimsReceived: 2,
+      eligibleCount: 2,
+      resolved: true,
+    });
+    expect(provisionalClaimSummary({ a: "work" }, ["a", "b"]).resolved).toBe(false);
   });
 
   test.each([

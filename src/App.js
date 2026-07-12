@@ -1,6 +1,6 @@
 import "@/App.css";
 import { Component, useEffect, useMemo, useRef, useState } from "react";
-import { playTabletopSound, stopTabletopSounds } from "@/tabletopSound";
+import { phaseSoundCueFor, playTabletopSound, stopTabletopSounds } from "@/tabletopSound";
 
 const asset = (name) => `${process.env.PUBLIC_URL || ""}/depression-game/${name}`;
 const MAX_PLAYERS = 8;
@@ -1170,9 +1170,11 @@ function App() {
   const [dismissedReceiptKeys, setDismissedReceiptKeys] = useState(savedGame.dismissedReceiptKeys || []);
   const [leaderboardVisible, setLeaderboardVisible] = useState(false);
   const [policySelection, setPolicySelection] = useState("");
+  const [claimSelection, setClaimSelection] = useState("");
   const viewRef = useRef(savedGame.view || "start");
   const lastNoticeSoundRef = useRef("");
   const tableSetSoundRef = useRef("");
+  const phaseSoundRef = useRef("");
   const joinClientIdRef = useRef(savedGame.joinClientId || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
 
   const phase = phases[phaseIndex] || phases[0];
@@ -1187,6 +1189,9 @@ function App() {
   const policyVote = shared?.policyVote || null;
   const activePolicyKey = policyVote?.resolved ? `${policyVote.id}-${policyVote.result?.winnerId}` : "";
   const submittedPolicyOption = activePlayer?.policyVotes?.[phase.id] || "";
+  const townHall = shared?.townHall || null;
+  const submittedClaim = activePlayer?.provisionalClaims?.[phase.id] || "";
+  const townHallReady = isResultsPhase || !townHall || townHall.resolved;
   const activeChoices = useMemo(() => {
     if (activePlayer?.gameOver) return [];
     if (!phase.choices.length) return phase.choices;
@@ -1271,6 +1276,10 @@ function App() {
   }, [phase.id, submittedPolicyOption]);
 
   useEffect(() => {
+    setClaimSelection(submittedClaim);
+  }, [phase.id, submittedClaim]);
+
+  useEffect(() => {
     viewRef.current = view;
   }, [view]);
 
@@ -1349,6 +1358,12 @@ function App() {
   }, [activePrivateNotice, phaseRevealVisible, soundEnabled, view]);
 
   useEffect(() => {
+    if (!phaseRevealVisible || phaseSoundRef.current === phase.id || (view !== "host" && view !== "player")) return;
+    phaseSoundRef.current = phase.id;
+    playTabletopSound(phaseSoundCueFor(phase.id), { enabled: soundEnabled, volume: view === "host" ? 0.72 : 0.34 });
+  }, [phase.id, phaseRevealVisible, soundEnabled, view]);
+
+  useEffect(() => {
     if (
       !soundEnabled ||
       phaseRevealVisible ||
@@ -1363,12 +1378,6 @@ function App() {
   function syncRoom(room) {
     if (!room) return;
     const nextPhaseIndex = room.phaseIndex || 0;
-    if (nextPhaseIndex !== phaseIndex) {
-      playTabletopSound(nextPhaseIndex >= phases.length - 1 ? "stamp" : "paper", {
-        enabled: soundEnabled,
-        volume: view === "host" ? 0.85 : 0.4,
-      });
-    }
     setRoomCode(room.roomCode);
     setPlayers(room.players || []);
     setShared(room.shared || null);
@@ -1606,6 +1615,26 @@ function App() {
     if (data) syncRoom(data.room);
   }
 
+  async function submitTownHallClaim(claim = claimSelection) {
+    if (!activePlayer || !claim || submittedClaim || view !== "player") return;
+    playTabletopSound("stamp", { enabled: soundEnabled, volume: 0.42 });
+    const data = await runGameRequest(() => gameApi(`/game/rooms/${roomCode}/town-hall-claim`, {
+      method: "POST",
+      body: JSON.stringify({ player_id: activePlayer.id, claim }),
+    }));
+    if (data) syncRoom(data.room);
+  }
+
+  async function resolveDemoTownHallClaims(claim = claimSelection) {
+    if (!claim || view !== "host" || !hostToken) return;
+    playTabletopSound("gavel", { enabled: soundEnabled, volume: 0.5 });
+    const data = await runGameRequest(() => gameApi(`/game/rooms/${roomCode}/town-hall-demo-claims`, {
+      method: "POST",
+      body: JSON.stringify({ host_token: hostToken, claim }),
+    }));
+    if (data) syncRoom(data.room);
+  }
+
   async function advancePhase() {
     if (view !== "host") return;
     if (!hostToken) {
@@ -1783,6 +1812,14 @@ function App() {
                   phase={phase}
                   shared={shared}
                   playerCount={activeRoundPlayers.length || players.length}
+                  family={activePlayer}
+                  view={view}
+                  selectedClaim={claimSelection}
+                  submittedClaim={submittedClaim}
+                  isBusy={isBusy}
+                  onSelectClaim={setClaimSelection}
+                  onSubmitClaim={submitTownHallClaim}
+                  onResolveDemoClaims={resolveDemoTownHallClaims}
                 />
               </div>
             ) : (
@@ -1904,7 +1941,7 @@ function App() {
             <TabletopStationNav
               activeStation={activeStation}
               unreadTelegrams={telegramArchive.filter((notice) => !readTelegramKeys.includes(notice.key)).length}
-              decisionsDisabled={!activePlayer || activeChoices.length === 0}
+              decisionsDisabled={!activePlayer || activeChoices.length === 0 || !townHallReady}
               onSelect={openTableStation}
             />
           )}
@@ -2496,14 +2533,25 @@ function PlayerFamilyLedger({ family }) {
   );
 }
 
-function NewsTownHall({ phase, shared, playerCount, showDecision, onDecision }) {
+function NewsTownHall({ phase, shared, playerCount, family, view, selectedClaim, submittedClaim, isBusy, onSelectClaim, onSubmitClaim, onResolveDemoClaims, showDecision, onDecision }) {
   return (
     <section className="news-town-hall">
       <div className="gd-news tabletop-news">
         <p className="gd-kicker">Public News · {phase.years}</p>
         {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
       </div>
-      <CommunityPanel shared={shared} playerCount={playerCount} />
+      <TownHallCouncil
+        shared={shared}
+        playerCount={playerCount}
+        family={family}
+        view={view}
+        selectedClaim={selectedClaim}
+        submittedClaim={submittedClaim}
+        isBusy={isBusy}
+        onSelectClaim={onSelectClaim}
+        onSubmitClaim={onSubmitClaim}
+        onResolveDemoClaims={onResolveDemoClaims}
+      />
       {showDecision && (
         <button className="open-decision-button" type="button" onClick={onDecision}>
           Make a decision
@@ -2565,7 +2613,23 @@ function Meters({ family }) {
   );
 }
 
-function CommunityPanel({ shared, playerCount = 0 }) {
+const CLAIM_OPTIONS = [
+  ["work", "Compete for work", "Employment"],
+  ["relief", "Seek relief", "Immediate aid"],
+  ["community", "Support the community", "Shared protection"],
+  ["household", "Protect the household", "Family security"],
+];
+
+function familyExposure(family) {
+  if (!family) return "Assign a family to receive a private exposure note.";
+  const risks = [
+    ["Food", family.food], ["Health", family.health], ["Savings", family.savings],
+    ["Hope", family.hope], ["Stability", family.stability],
+  ].sort((a, b) => a[1] - b[1]);
+  return `${family.role}: ${risks[0][0]} is currently the household's greatest exposure at ${risks[0][1]}.`;
+}
+
+function TownHallCouncil({ shared, playerCount = 0, family, view, selectedClaim, submittedClaim, isBusy, onSelectClaim, onSubmitClaim, onResolveDemoClaims }) {
   const current = shared || {
     trust: 55,
     communityPot: 3,
@@ -2579,41 +2643,67 @@ function CommunityPanel({ shared, playerCount = 0 }) {
   const familiesCompeting = Math.max(1, playerCount);
   const workScarce = current.workSlots < familiesCompeting;
   const reliefScarce = current.reliefSlots < familiesCompeting;
+  const townHall = current.townHall || {
+    claimsReceived: 0,
+    eligibleCount: familiesCompeting,
+    resolved: false,
+    counts: { work: 0, relief: 0, community: 0, household: 0 },
+    demoClaimsRemaining: 0,
+    dangerCount: 0,
+  };
+  const canResolveDemoClaims = view === "host" && townHall.demoClaimsRemaining > 0;
+  const canSubmit = view === "player" && !submittedClaim;
+  const selection = submittedClaim || selectedClaim;
   return (
-    <div className="gd-panel community-panel">
-      <p className="gd-kicker">Town Hall</p>
-      <h2>Discuss aloud, choose secretly</h2>
-      <p className="gd-sync">Take a short meeting discussion before choices. The app only records final choices.</p>
-      <div className="scarcity-board">
-        <div className={workScarce ? "scarcity-card scarce" : "scarcity-card"}>
-          <span>Work slots</span>
-          <strong>{current.workSlots}/{familiesCompeting}</strong>
-          <p>{workScarce ? "Scarce. Hiring resolves after all choices." : "Enough for current applicants."}</p>
-        </div>
-        <div className={reliefScarce ? "scarcity-card scarce" : "scarcity-card"}>
-          <span>Relief slots</span>
-          <strong>{current.reliefSlots}/{familiesCompeting}</strong>
-          <p>{reliefScarce ? "Scarce. Not first-click-wins." : "Enough for current applicants."}</p>
-        </div>
+    <div className="town-hall-council">
+      <header className="council-masthead">
+        <div><p className="gd-kicker">Municipal planning ledger</p><h2>Town Hall Council</h2></div>
+        <span className="council-risk-stamp">{townHall.dangerCount} {townHall.dangerCount === 1 ? "family" : "families"} at risk</span>
+      </header>
+      <div className="council-scarcity" aria-label="Town scarcity">
+        <div className={workScarce ? "scarce" : ""}><span>Work slots</span><strong>{current.workSlots}</strong><small>{workScarce ? `for ${familiesCompeting} families` : "available"}</small></div>
+        <div className={reliefScarce ? "scarce" : ""}><span>Relief slots</span><strong>{current.reliefSlots}</strong><small>{reliefScarce ? `for ${familiesCompeting} families` : "available"}</small></div>
+        <div className={potStatus}><span>Community pot</span><strong>{current.communityPot}/{current.communityNeed}</strong><small>contributed / need</small></div>
       </div>
-      <div className="community-stats">
-        <div className={potStatus}>
-          <span>Community pot</span>
-          <strong>{current.communityPot}/{current.communityNeed}</strong>
+      <div className="council-progress"><span>{townHall.claimsReceived} of {townHall.eligibleCount} priorities placed</span><i><b style={{ width: `${townHall.eligibleCount ? townHall.claimsReceived / townHall.eligibleCount * 100 : 0}%` }} /></i></div>
+      <div className="council-body">
+        <div className="council-claims" aria-label="Provisional priorities">
+          {CLAIM_OPTIONS.map(([id, title, focus]) => (
+            <button
+              type="button"
+              className={`provisional-claim ${selection === id ? "selected" : ""}`}
+              key={id}
+              onClick={() => onSelectClaim(id)}
+              disabled={Boolean(submittedClaim) || (!canSubmit && !canResolveDemoClaims) || isBusy}
+              aria-pressed={selection === id}
+            >
+              <span>Intention</span><strong>{title}</strong>
+              <small>{townHall.resolved ? `${townHall.counts[id]} ${townHall.counts[id] === 1 ? "family" : "families"}` : `Focus: ${focus}`}</small>
+            </button>
+          ))}
         </div>
-        <div className={trustStatus}>
-          <span>Trust climate</span>
-          <strong>{current.trust}</strong>
-        </div>
+        <aside className="council-private-note">
+          <span>Private · family exposure</span>
+          <strong>{family?.name ? `${family.name} Family` : "Family notice"}</strong>
+          <p>{familyExposure(family)}</p>
+          <small>Claims are provisional and carry no penalty. Room totals reveal together.</small>
+        </aside>
       </div>
-      <details className="community-record">
-        <summary>Town record</summary>
-        <div className="community-thresholds" aria-label="Community pot thresholds">
-          <span><b>{current.communityNeed}</b> Safety: trusted families receive basic protection</span>
-          <span><b>{current.communitySurplusNeed ?? current.communityNeed + Math.ceil(familiesCompeting / 2)}</b> Surplus: two endangered trusted families receive extra aid</span>
-        </div>
-        <p className="community-last">{current.lastRound}</p>
-      </details>
+      {current.activePolicy && <div className="council-policy"><span>Policy in force</span><strong>{current.activePolicy.title}</strong><p>{current.activePolicy.detail}</p></div>}
+      <footer className="council-footer">
+        <details className="community-record">
+          <summary>Town record</summary>
+          <p className="community-last">{current.lastRound}</p>
+          <small>Trust climate {current.trust} · Safety threshold {current.communityNeed} · Surplus threshold {current.communitySurplusNeed ?? current.communityNeed + Math.ceil(familiesCompeting / 2)}</small>
+        </details>
+        {(canSubmit || canResolveDemoClaims) && !submittedClaim && (
+          <button className="place-priority" type="button" disabled={!selectedClaim || isBusy} onClick={() => canResolveDemoClaims ? onResolveDemoClaims(selectedClaim) : onSubmitClaim(selectedClaim)}>
+            {canResolveDemoClaims ? `Place ${townHall.demoClaimsRemaining} demo priorities` : "Place priority"}
+          </button>
+        )}
+        {submittedClaim && <span className="priority-sealed">Priority placed · waiting for the room</span>}
+        {townHall.resolved && <span className="priority-revealed">Priorities revealed · Decisions unlocked</span>}
+      </footer>
     </div>
   );
 }

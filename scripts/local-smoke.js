@@ -23,6 +23,22 @@ const policyOptions = {
   defense_shift: ["defense_contracts", "civilian_recovery"],
 };
 
+async function completeTownHall(baseUrl, roomCode, state) {
+  const townHall = state.room.shared?.townHall;
+  if (!townHall || townHall.resolved) return state;
+  const claims = ["work", "relief", "community", "household"];
+  const activePlayers = state.room.players.filter((player) => !player.gameOver);
+  for (const [index, player] of activePlayers.entries()) {
+    await request(baseUrl, `/rooms/${roomCode}/town-hall-claim`, {
+      method: "POST",
+      body: JSON.stringify({ player_id: player.id, claim: claims[index % claims.length] }),
+    });
+  }
+  const next = await request(baseUrl, `/rooms/${roomCode}`);
+  if (!next.room.shared.townHall?.resolved) throw new Error(`Expected ${next.room.phaseIndex} Town Hall claims to resolve.`);
+  return next;
+}
+
 async function completePolicyVote(baseUrl, roomCode, state, { tie = false } = {}) {
   const policy = state.room.shared?.policyVote;
   if (!policy || policy.resolved) return state;
@@ -98,6 +114,7 @@ async function createFullRoom(baseUrl, prefix) {
 async function assertHardBetrayal(baseUrl) {
   const { roomCode } = await createFullRoom(baseUrl, "Betrayal Probe");
   let state = await request(baseUrl, `/rooms/${roomCode}`);
+  state = await completeTownHall(baseUrl, roomCode, state);
   const betrayer = state.room.players[0];
 
   await Promise.all(
@@ -165,6 +182,7 @@ async function assertHardModeNemesis(baseUrl) {
   if (updatedAttacker.rivalId !== target.id || updatedAttacker.rivalTokensRemaining !== 1) {
     throw new Error("Expected rival nomination to save the target and spend one token.");
   }
+  state = await completeTownHall(baseUrl, roomCode, state);
   await Promise.all([
     request(baseUrl, `/rooms/${roomCode}/choices`, {
       method: "POST",
@@ -197,6 +215,8 @@ async function assertEmergencyCollapse(baseUrl) {
   if (player.collapseWarning?.emergencyChoiceId !== "emergency_health") {
     throw new Error(`Expected low health to expose emergency_health, got ${player.collapseWarning?.emergencyChoiceId || "none"}`);
   }
+  let preChoice = await request(baseUrl, `/rooms/${roomCode}`);
+  await completeTownHall(baseUrl, roomCode, preChoice);
   let state = await request(baseUrl, `/rooms/${roomCode}/choices`, {
     method: "POST",
     body: JSON.stringify({ player_id: player.id, choices: ["keep_factory_job", "hoard_relief"] }),
@@ -213,6 +233,8 @@ async function assertEmergencyCollapse(baseUrl) {
     body: JSON.stringify({ player_name: "Emergency Rescue", client_id: `emergency-rescue-${Date.now()}` }),
   });
   player = joined.room.players[0];
+  preChoice = await request(baseUrl, `/rooms/${roomCode}`);
+  await completeTownHall(baseUrl, roomCode, preChoice);
   state = await request(baseUrl, `/rooms/${roomCode}/choices`, {
     method: "POST",
     body: JSON.stringify({ player_id: player.id, choices: ["emergency_health", "keep_factory_job"] }),
@@ -228,6 +250,7 @@ async function assertRematchJoinLink(baseUrl) {
   let state = await request(baseUrl, `/rooms/${roomCode}`);
   for (let round = 0; round < phaseChoices.length; round += 1) {
     state = await completePolicyVote(baseUrl, roomCode, state, { tie: state.room.shared?.policyVote?.phaseId === "bank_holiday" });
+    state = await completeTownHall(baseUrl, roomCode, state);
     await Promise.all(
       state.room.players.filter((player) => !player.gameOver).map((player) =>
         request(baseUrl, `/rooms/${roomCode}/choices`, {
@@ -291,6 +314,7 @@ async function main() {
 
   for (let round = 0; round < phaseChoices.length; round += 1) {
     state = await completePolicyVote(baseUrl, roomCode, state, { tie: state.room.shared?.policyVote?.phaseId === "bank_holiday" });
+    state = await completeTownHall(baseUrl, roomCode, state);
     const choices = phaseChoices[round];
     const activePlayers = state.room.players.filter((player) => !player.gameOver);
     if (!activePlayers.length) {
