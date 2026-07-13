@@ -483,6 +483,12 @@ describe("staged tabletop experience", () => {
     );
     await act(async () => newsButton.click());
     expect(container.querySelectorAll(".town-hall-council")).toHaveLength(1);
+    expect(container.querySelector(".news-scene .player-family-ledger")).toBeNull();
+
+    const decisionButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Make a decision")
+    );
+    expect(decisionButton.disabled).toBe(true);
   });
 
   test("lets a host with an assigned family open decisions on the tabletop", async () => {

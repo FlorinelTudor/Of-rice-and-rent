@@ -1228,7 +1228,7 @@ function App() {
   const isResultsPhase = phase.id === "results";
   const isRecoveryPhase = phase.id === "recovery";
   const previousPhaseId = phases[phaseIndex - 1]?.id;
-  const activePlayer = players.find((p) => p.id === activePlayerId) || players[0];
+  const activePlayer = players.find((p) => p.id === activePlayerId) || null;
   const activeRoundPlayers = players.filter((p) => !p.gameOver);
   const submittedChoices = activePlayer?.choices?.[phase.id] || [];
   const submittedCount = activeRoundPlayers.filter((p) => p.choices?.[phase.id]?.length === 2).length;
