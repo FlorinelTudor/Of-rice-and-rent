@@ -96,6 +96,10 @@ describe("staged tabletop experience", () => {
     expect(container.querySelector(".tabletop-surface + .tabletop-station-nav")).not.toBeNull();
     expect(container.querySelectorAll(".tabletop-station-nav button")).toHaveLength(4);
     expect(container.querySelector(".news-town-hall")).not.toBeNull();
+    expect(container.querySelector(".news-bulletin-column")).not.toBeNull();
+    expect(container.querySelector(".phase-effects-bulletin")).not.toBeNull();
+    expect(container.querySelectorAll(".phase-effect-entry")).toHaveLength(2);
+    expect(container.textContent).toContain("Stable work protects the ledger");
     expect(container.textContent).toContain("Community pot");
     expect(container.querySelector(".gd-choice-grid")).toBeNull();
 
@@ -320,6 +324,30 @@ describe("staged tabletop experience", () => {
     );
     await act(async () => debriefButton.click());
     expect(container.querySelector(".results-debrief-scene")).not.toBeNull();
+  });
+
+  test("lets the host choose Competitive Mode for the next scenario", async () => {
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      view: "host",
+      hostToken: "host-secret",
+      phaseIndex: 11,
+      players: [{ ...player, score: 412 }],
+    }));
+    await act(async () => root.render(<App />));
+
+    const debriefButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent.includes("Historical debrief")
+    );
+    await act(async () => debriefButton.click());
+
+    const competitiveMode = container.querySelector(".results-rematch-sheet .hard-mode-toggle");
+    expect(competitiveMode).not.toBeNull();
+    expect(competitiveMode.getAttribute("aria-pressed")).toBe("false");
+
+    await act(async () => competitiveMode.click());
+    expect(competitiveMode.getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector(".results-rematch-sheet").textContent).toContain("Competitive run");
   });
 
   test("uses a dense overview when emergency and rivalry cards expand the hand", async () => {

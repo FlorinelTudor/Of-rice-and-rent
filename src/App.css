@@ -2663,6 +2663,13 @@
   align-items: stretch;
 }
 
+.news-bulletin-column {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
 .news-town-hall .tabletop-news {
   display: flex;
   flex-direction: column;
@@ -2677,6 +2684,78 @@
 .news-town-hall .community-panel {
   animation: townHallLand .65s .16s cubic-bezier(.2, .85, .25, 1.04) both;
 }
+
+.phase-effects-bulletin {
+  min-width: 0;
+  padding: 13px 15px;
+  border: 2px solid #765e3c;
+  background: #f2e2b9;
+  color: #30271c;
+  box-shadow: 0 8px 18px rgba(45, 30, 12, .2);
+}
+
+.phase-effects-bulletin header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 3px double #6b583b;
+}
+
+.phase-effects-bulletin header span,
+.phase-effects-bulletin header small,
+.phase-policy-effect b {
+  color: #8b342a;
+  font: 800 9px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.phase-effects-bulletin h3 {
+  margin: 3px 0 0;
+  font: 700 21px/1 "Source Serif 4", Georgia, serif;
+}
+
+.phase-effects-bulletin header small {
+  padding-top: 3px;
+  color: #6b5a42;
+  white-space: nowrap;
+}
+
+.phase-effects-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 13px;
+  padding-top: 10px;
+}
+
+.phase-effect-entry {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 31px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.phase-effect-entry > i {
+  display: grid;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font: 900 16px/1 Arial, sans-serif;
+  font-style: normal;
+}
+
+.phase-effect-entry.buff > i { color: #2f6947; background: #dce9d8; }
+.phase-effect-entry.debuff > i { color: #983c31; background: #efd6cd; }
+.phase-effect-entry p { min-width: 0; margin: 0; }
+.phase-effect-entry strong { display: block; font-size: 12px; line-height: 1.15; }
+.phase-effect-entry span { display: block; margin-top: 2px; color: #6d604e; font-size: 10px; line-height: 1.25; }
+.phase-policy-effect { margin: 9px 0 0; padding-top: 7px; border-top: 1px solid #ad946b; color: #5e503c; font-size: 10px; }
+.phase-policy-effect b { margin-right: 5px; }
 
 .open-decision-button {
   grid-column: 1 / -1;
@@ -3474,21 +3553,44 @@
 .tabletop-surface .phase-table-notes { display: none; }
 
 .tabletop-surface .news-town-hall { display: block; }
+.tabletop-surface .news-bulletin-column {
+  position: absolute;
+  z-index: 3;
+  top: 218px;
+  bottom: 18px;
+  left: 3%;
+  width: 40%;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+}
 .tabletop-surface .tabletop-news { position: static; border: 0; background: transparent; box-shadow: none; animation: none; transform: none; }
 .tabletop-surface .tabletop-news .gd-kicker { display: none; }
 .tabletop-surface .tabletop-news img {
-  position: absolute;
-  z-index: 3;
-  top: 34%;
-  left: 5%;
-  width: 39%;
-  max-width: 610px;
-  max-height: none;
+  position: static;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: 100%;
   object-fit: contain;
   filter: drop-shadow(0 20px 20px rgba(25, 16, 7, .38));
   transform: rotate(-3deg);
   animation: mockThrowPaper 1s cubic-bezier(.17, .82, .2, 1.08) both;
 }
+
+.tabletop-surface .phase-effects-bulletin {
+  position: relative;
+  z-index: 5;
+  padding: 11px 13px;
+  transform: rotate(.35deg);
+  animation: mockTownIn .55s .24s cubic-bezier(.2, .85, .25, 1.05) both;
+}
+
+.tabletop-surface .phase-effects-bulletin h3 { font-size: 18px; }
+.tabletop-surface .phase-effects-list { gap: 7px 10px; padding-top: 8px; }
+.tabletop-surface .phase-effect-entry { grid-template-columns: 27px minmax(0, 1fr); gap: 7px; }
+.tabletop-surface .phase-effect-entry > i { width: 27px; height: 27px; font-size: 14px; }
+.tabletop-surface .phase-effect-entry strong { font-size: 11px; }
+.tabletop-surface .phase-effect-entry span { font-size: 9px; }
 
 .tabletop-surface .community-panel {
   position: absolute;
@@ -3815,7 +3917,9 @@
 @media (max-width: 820px) {
   .tabletop-surface .news-scene { position: relative; overflow: auto; padding: 72px 14px 20px; }
   .tabletop-surface .news-scene .player-family-ledger { position: relative; top: auto; right: auto; left: auto; margin-bottom: 14px; }
-  .tabletop-surface .tabletop-news img { position: relative; top: auto; left: auto; width: 100%; max-width: none; transform: rotate(-1deg); }
+  .tabletop-surface .news-bulletin-column { position: relative; top: auto; bottom: auto; left: auto; width: 100%; gap: 12px; }
+  .tabletop-surface .tabletop-news img { position: relative; top: auto; left: auto; width: 100%; height: auto; max-width: none; transform: rotate(-1deg); }
+  .tabletop-surface .phase-effects-bulletin { transform: none; }
   .tabletop-surface .town-hall-council { position: relative; top: auto; right: auto; bottom: auto; width: 100%; margin-top: 14px; padding: 13px; transform: none; }
   .council-masthead h2 { font-size: 27px; }
   .council-body { grid-template-columns: 1fr; }
@@ -3834,7 +3938,7 @@
   .tabletop-surface .player-family-ledger > img { width: 62px; height: 62px; }
   .tabletop-surface .player-family-objective { grid-column: 1 / -1; border-left: 0; }
   .tabletop-surface .player-ledger-meters { grid-template-columns: repeat(4, 1fr); }
-  .tabletop-surface .tabletop-news img { top: 34%; left: 5%; width: 90%; }
+  .tabletop-surface .tabletop-news img { width: 100%; }
   .tabletop-surface .community-panel { top: auto; right: 5%; bottom: 4%; width: 90%; min-height: 290px; }
   .tabletop-surface .gd-choice-grid { top: 255px; bottom: 62px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tabletop-surface .gd-choice-grid[data-choice-count="5"],
@@ -4005,7 +4109,15 @@
 .results-rematch-sheet > small { display: block; margin-bottom: 10px; color: #6d6253; }
 .results-rematch-sheet .scenario-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .results-rematch-sheet .scenario-choice-grid button { min-height: 82px; }
-.results-rematch-sheet .hard-mode-toggle { display: none; }
+.results-rematch-sheet .hard-mode-toggle {
+  margin-top: 12px;
+  min-height: 92px;
+  background: rgba(255, 250, 238, .82);
+}
+
+.results-rematch-sheet .hard-mode-toggle.selected {
+  background: #f0dfd2;
+}
 
 .results-scene-nav {
   display: flex;

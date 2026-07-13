@@ -17,6 +17,52 @@ const PHASE_LESSONS = {
   defense_shift: "New demand creates opportunity, but never for every household at once.",
   recovery: "The resources a family protected shape what recovery feels like.",
 };
+const PHASE_ACTION_EFFECTS = {
+  postwar: [
+    ["buff", "Stable work protects the ledger", "Keeping employment gives the strongest stability gain."],
+    ["debuff", "Credit carries forward", "Store credit protects food now but adds substantial debt."],
+  ],
+  recession_1921: [
+    ["buff", "Cash cushions matter more", "Savings and steady employment soften falling hours."],
+    ["debuff", "Work and relief are scarce", "Applications compete for limited town slots."],
+  ],
+  early_boom: [
+    ["buff", "Comfort actions gain momentum", "Housing, education, and household purchases lift hope."],
+    ["debuff", "Easy credit builds exposure", "Credit purchases improve life now while debt accumulates."],
+  ],
+  speculation: [
+    ["buff", "Stock buying actions improved", "Investment choices offer their strongest savings and stock gains."],
+    ["debuff", "Borrowing magnifies losses", "Leveraged investment adds heavy debt and weakens stability."],
+  ],
+  crash: [
+    ["buff", "Liquidity actions gain value", "Selling or withdrawing can preserve part of the family cushion."],
+    ["debuff", "Stock holdings collapse", "Remaining stock destroys savings when this phase resolves."],
+  ],
+  deepening: [
+    ["buff", "Mutual aid protects stability", "Cooperative choices strengthen hope and household resilience."],
+    ["debuff", "Scarcity pressure intensifies", "Work, food, and relief choices carry harsher tradeoffs."],
+  ],
+  bank_holiday: [
+    ["buff", "Bank trust can recover", "Reopened-bank choices strongly improve trust and stability."],
+    ["debuff", "Relief remains uneven", "Families still compete for limited work and assistance."],
+  ],
+  work_relief: [
+    ["buff", "Public work improves security", "Work-relief choices restore savings, hope, and stability."],
+    ["debuff", "Health costs remain costly", "Repairing health requires a meaningful savings sacrifice."],
+  ],
+  second: [
+    ["buff", "Cash rebuilding is valuable", "Savings actions protect families against the renewed slowdown."],
+    ["debuff", "Employment competition returns", "Work actions compete for fewer openings once more."],
+  ],
+  defense_shift: [
+    ["buff", "Factory work gains momentum", "Defense employment offers strong savings and hope gains."],
+    ["debuff", "Moving still disrupts home", "Following new work can reduce household stability."],
+  ],
+  recovery: [
+    ["buff", "High meters unlock bonuses", "Strong family ledgers reveal special final actions."],
+    ["debuff", "Final tradeoffs still count", "Debt, danger, and trust penalties remain in the final score."],
+  ],
+};
 const GAME_STATE_VERSION = "blob-multiplayer-v2";
 const COOPERATIVE_CHOICES = new Set(["join_mutual_aid", "organize_neighbors", "support_union", "sponsor_neighbor", "contribute_community_pot", "shopkeeper_extend_credit"]);
 const SABOTAGE_CHOICE_IDS = ["rival_undercut_work", "rival_spread_bank_rumors", "rival_call_in_debt", "rival_block_relief"];
@@ -1795,6 +1841,8 @@ function App() {
                 isBusy={isBusy}
                 selectedScenarioId={selectedScenarioId}
                 onSelectScenario={setSelectedScenarioId}
+                selectedHardMode={selectedHardMode}
+                onHardModeChange={setSelectedHardMode}
                 onCreateScenario={createHostRoom}
                 nextRoomCode={nextRoomCode}
                 onJoinNextRoom={joinNextRoom}
@@ -2275,6 +2323,8 @@ function ResultsPhase({
   isBusy,
   selectedScenarioId,
   onSelectScenario,
+  selectedHardMode,
+  onHardModeChange,
   onCreateScenario,
   nextRoomCode,
   onJoinNextRoom,
@@ -2366,10 +2416,18 @@ function ResultsPhase({
               <p className="gd-kicker">Next Table Challenge</p>
               <h2>Choose the next scenario</h2>
               {rematchScenario && <small>Suggested next: {rematchScenario.title}. The host can override it.</small>}
-              <ScenarioPicker selectedScenarioId={selectedScenarioId} onSelect={onSelectScenario} compact />
+              <ScenarioPicker
+                selectedScenarioId={selectedScenarioId}
+                onSelect={onSelectScenario}
+                hardMode={selectedHardMode}
+                onHardModeChange={view === "host" ? onHardModeChange : undefined}
+                compact
+              />
               {view === "host" && (
                 <button onClick={() => onCreateScenario(selectedScenario.id)} disabled={isBusy}>
-                  {isBusy ? "Creating..." : `Create next run: ${selectedScenario.title}`}
+                  {isBusy
+                    ? "Creating..."
+                    : `Create next ${selectedHardMode ? "Competitive" : "Standard"} run: ${selectedScenario.title}`}
                 </button>
               )}
               {view !== "host" && nextRoomCode && (
@@ -2537,9 +2595,12 @@ function PlayerFamilyLedger({ family }) {
 function NewsTownHall({ phase, shared, playerCount, players, family, view, selectedClaim, submittedClaim, isBusy, onSelectClaim, onSubmitClaim, onResolveDemoClaims, showDecision, onDecision }) {
   return (
     <section className="news-town-hall">
-      <div className="gd-news tabletop-news">
-        <p className="gd-kicker">Public News · {phase.years}</p>
-        {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
+      <div className="news-bulletin-column">
+        <div className="gd-news tabletop-news">
+          <p className="gd-kicker">Public News · {phase.years}</p>
+          {phase.newsImage && <img src={asset(phase.newsImage)} alt={phase.news} />}
+        </div>
+        <PhaseEffectsBulletin phase={phase} activePolicy={shared?.activePolicy} />
       </div>
       <TownHallCouncil
         shared={shared}
@@ -2561,6 +2622,30 @@ function NewsTownHall({ phase, shared, playerCount, players, family, view, selec
         </button>
       )}
     </section>
+  );
+}
+
+function PhaseEffectsBulletin({ phase, activePolicy }) {
+  const effects = PHASE_ACTION_EFFECTS[phase.id] || [];
+  return (
+    <aside className="phase-effects-bulletin" aria-label={`Action effects for ${phase.years}`}>
+      <header>
+        <div>
+          <span>Market notice</span>
+          <h3>Terms have changed</h3>
+        </div>
+        <small>Effective this phase</small>
+      </header>
+      <div className="phase-effects-list">
+        {effects.map(([tone, title, detail]) => (
+          <div className={`phase-effect-entry ${tone}`} key={title}>
+            <i aria-hidden="true">{tone === "buff" ? "↑" : "↓"}</i>
+            <p><strong>{title}</strong><span>{detail}</span></p>
+          </div>
+        ))}
+      </div>
+      {activePolicy && <p className="phase-policy-effect"><b>Policy in force</b> {activePolicy.title}</p>}
+    </aside>
   );
 }
 

@@ -1,5 +1,11 @@
 Original prompt: Build a 10-25 minute multiplayer learning game where colleagues manage families through an uncertain 1919-1942 economy, with host controls, randomized family backgrounds, market/news phases, community pot competition, final awards, and historical debrief.
 
+## 2026-07-13
+
+- Added a host-only Competitive Mode selector to the final Historical Debrief/rematch desk. The selected scenario and mode now appear together on the creation action and carry into the next room.
+- Added the Exchange Circular beneath Town Hall newspapers. Every playable phase now shows two concise action buffs/nerfs, with any active voted policy called out below them; the newspaper uses contained sizing so it remains fully visible beside the Council.
+- Verification: 39 tests passed, the 8-player multiplayer smoke test passed, the production build compiled successfully, and the laptop layout was visually inspected in Chromium.
+
 ## 2026-06-26
 
 - Fixed family portrait danger state to use current meters only, so a recovered savings/food/hope/etc. meter can return to the normal family portrait.
