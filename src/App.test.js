@@ -24,6 +24,13 @@ const player = {
 const actionImpacts = {
   keep_factory_job: { food: 6, savings: 9, hope: -5, stability: 16 },
 };
+const testAction = (id, title = id) => ({ id, title, detail: "Test card detail", impact: actionImpacts[id] || {} });
+const postwarActions = [
+  testAction("keep_factory_job", "Keep factory job"), testAction("use_savings_food", "Use savings for food"),
+  testAction("move_to_city", "Move closer to work"), testAction("take_store_credit", "Buy on store credit"),
+  testAction("pull_child_school", "Older child works"), testAction("join_mutual_aid", "Join mutual aid"),
+  testAction("contribute_community_pot", "Share supplies"),
+];
 
 const room = {
   roomCode: "TEST",
@@ -52,6 +59,7 @@ function savedPlayerState() {
     activePlayerId: player.id,
     playerName: player.playerName,
     actionImpacts,
+    availableActions: postwarActions,
   };
 }
 
@@ -177,7 +185,10 @@ describe("staged tabletop experience", () => {
   });
 
   test("uses hopeful human artwork for boom action cards", async () => {
-    window.localStorage.setItem("gd-game-state", JSON.stringify({ ...savedPlayerState(), phaseIndex: 3 }));
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(), phaseIndex: 3,
+      availableActions: [testAction("invest_stocks", "Invest savings in stocks")],
+    }));
     await act(async () => root.render(<App />));
 
     const decisionButton = Array.from(container.querySelectorAll("button")).find(
@@ -193,7 +204,10 @@ describe("staged tabletop experience", () => {
   });
 
   test("uses distressed human artwork for bust action cards", async () => {
-    window.localStorage.setItem("gd-game-state", JSON.stringify({ ...savedPlayerState(), phaseIndex: 4 }));
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(), phaseIndex: 4,
+      availableActions: [testAction("sell_stocks_now", "Sell remaining stocks")],
+    }));
     await act(async () => root.render(<App />));
 
     const decisionButton = Array.from(container.querySelectorAll("button")).find(
@@ -369,6 +383,7 @@ describe("staged tabletop experience", () => {
       activePlayerId: pressuredPlayer.id,
       phaseIndex: 5,
       scenario: { ...room.scenario, hardMode: true },
+      availableActions: Array.from({ length: 10 }, (_, index) => testAction(`dense-${index}`, `Dense card ${index + 1}`)),
     }));
     await act(async () => root.render(<App />));
 

@@ -67,4 +67,134 @@ const ACTION_IMPACTS = Object.freeze({
   emergency_debt: { debt: -38, savings: -20, hope: -6, stability: 5 },
 });
 
-module.exports = { ACTION_IMPACTS };
+const ACTION_COPY = Object.fromEntries([
+  ["keep_factory_job", "Keep factory job", "Accept shorter hours and protect stability."],
+  ["use_savings_food", "Use savings for food", "Protect health, but reduce your cushion."],
+  ["move_to_city", "Move closer to work", "Higher wage chance, higher rent."],
+  ["take_store_credit", "Buy on store credit", "Preserve cash now, add debt later."],
+  ["pull_child_school", "Older child works", "Raise income, harm education and morale."],
+  ["join_mutual_aid", "Join mutual aid", "Build support, spend time and small dues."],
+  ["contribute_community_pot", "Share supplies", "Help the community pot at a short-term cost."],
+  ["hoard_relief", "Take extra relief", "Gain food now, but damage trust if exposed."],
+  ["buy_radio_credit", "Buy a radio on credit", "Raise hope and status, add debt."],
+  ["pay_down_debt", "Pay down debt", "Less exciting, more resilient."],
+  ["night_school", "Night school", "Improve future job options, lose income now."],
+  ["keep_cash", "Keep cash cushion", "A cautious choice in an optimistic time."],
+  ["move_better_rental", "Move to better rental", "Improve health and morale, raise rent."],
+  ["build_emergency_fund", "Build emergency fund", "Delay comfort, strengthen resilience."],
+  ["invest_stocks", "Invest savings in stocks", "Join the boom and chase returns."],
+  ["borrow_to_invest", "Borrow to invest", "Bigger upside, dangerous leverage."],
+  ["undercut_wages", "Undercut wages", "Win scarce work by accepting less pay and lower trust."],
+  ["sell_stocks_now", "Sell remaining stocks", "Lock in losses, preserve some cash."],
+  ["withdraw_bank_cash", "Withdraw bank cash", "Protect from bank failure, feed panic."],
+  ["cut_food_rent", "Cut food and rent costs", "Reduce spending, hurt health and stability."],
+  ["search_any_work", "Search for any work", "Chance of income, high stress."],
+  ["move_with_relatives", "Move in with relatives", "Lower rent, lower independence and hope."],
+  ["keep_children_school", "Keep children in school", "Protect the future, sacrifice short-term income."],
+  ["sell_possessions", "Sell possessions", "Raise cash, lower hope and comfort."],
+  ["apply_public_works", "Apply for public works", "Chance of wages, physically demanding."],
+  ["trust_reopened_bank", "Return cash to reopened bank", "Rebuild safety, depends on trust."],
+  ["accept_relief", "Accept relief support", "Protect food and health, lower pride."],
+  ["move_for_work_camp", "Send eldest to work camp", "Income and skills, family separation."],
+  ["organize_neighbors", "Organize neighbors", "Mutual aid and voice, takes time."],
+  ["delay_medical_care", "Delay medical care", "Preserve cash, risk health later."],
+  ["stay_public_works", "Stay with public works", "Stable if available, limited advancement."],
+  ["repair_health", "Spend on health", "Improve long-term survival, reduce cash."],
+  ["rebuild_savings", "Rebuild savings", "Slow progress, stronger resilience."],
+  ["seek_defense_work", "Seek defense work", "Move toward growing industry, but disrupt family life."],
+  ["support_union", "Support union drive", "Potential wage gains, job conflict risk."],
+  ["older_child_fulltime", "Older child works full-time", "Income now, education cost deepens."],
+  ["inform_on_black_market", "Inform on informal trade", "Gain a short edge, but damage trust."],
+  ["factory_overtime", "Take extra factory shift", "Factory household: more pay, more strain."],
+  ["shopkeeper_extend_credit", "Extend customer credit", "Shopkeepers earn loyalty while tying up cash."],
+  ["tenant_sell_crop_early", "Sell crop early", "Tenant farmers gain cash now but lose food security."],
+  ["immigrant_english_classes", "Attend English night class", "Build standing and skills while losing income time."],
+  ["railroad_follow_work", "Follow rail work", "Chase pay along the line and unsettle home."],
+  ["garment_piecework_home", "Take garment piecework home", "Extra income costs schooling and morale."],
+  ["service_laundry_clients", "Take laundry clients", "Side income and reputation come with exhausting hours."],
+  ["miner_company_store", "Use company store credit", "Food now creates company debt later."],
+  ["seasonal_follow_harvest", "Follow the harvest", "Gain food and wages while weakening stability."],
+  ["seek_charity_clinic", "Seek charity clinic", "Recover health, but lose savings and hope."],
+  ["send_family_to_country", "Send family to relatives", "Protect food and health, but reduce stability."],
+  ["pawn_heirloom", "Pawn family heirloom", "Raise cash fast, but hurt hope."],
+  ["take_desperate_work", "Take dangerous work", "Bring income and food while risking health."],
+  ["sponsor_neighbor", "Sponsor a neighbor", "Build support by spending savings."],
+  ["fund_training", "Fund training", "Improve education and future resilience."],
+  ["final_food_surplus", "Share a stocked pantry", "Convert food surplus into trust and stability."],
+  ["final_health_shift", "Take a double shift", "Use strong health to earn final income."],
+  ["final_savings_invest", "Make a careful investment", "Turn cash into long-term stability."],
+  ["final_hope_leadership", "Rally the neighborhood", "Use hope to lift trust and community protection."],
+  ["final_education_training", "Train for skilled work", "Use education to claim better work."],
+  ["final_stability_settle", "Settle the household", "Lock in resilience and reduce debt pressure."],
+  ["rival_undercut_work", "Undercut rival wages", "Compete directly for scarce work."],
+  ["rival_spread_bank_rumors", "Spread bank rumors", "Shake confidence around your rival's savings."],
+  ["rival_call_in_debt", "Call in a private debt", "Squeeze your rival's cash cushion at a trust cost."],
+  ["rival_block_relief", "Block relief access", "Use reputation pressure against your rival."],
+  ["emergency_health", "Seek emergency treatment", "Prevent a health collapse at a severe financial cost."],
+  ["emergency_food", "Secure emergency food", "Prevent a food collapse while losing standing."],
+  ["emergency_hope", "Call the family together", "Prevent a hope collapse by spending the last cushion."],
+  ["emergency_debt", "Renegotiate every debt", "Prevent debt collapse through a painful settlement."],
+].map(([id, title, detail]) => [id, { title, detail }]));
+
+const PHASE_ACTION_IDS = Object.freeze({
+  postwar: ["keep_factory_job", "use_savings_food", "move_to_city", "take_store_credit", "pull_child_school", "join_mutual_aid", "contribute_community_pot"],
+  recession_1921: ["use_savings_food", "take_store_credit", "move_to_city", "pull_child_school", "join_mutual_aid", "hoard_relief", "keep_factory_job"],
+  early_boom: ["buy_radio_credit", "pay_down_debt", "night_school", "keep_cash", "move_better_rental", "build_emergency_fund"],
+  speculation: ["invest_stocks", "borrow_to_invest", "buy_radio_credit", "pay_down_debt", "keep_cash", "night_school", "undercut_wages"],
+  crash: ["sell_stocks_now", "withdraw_bank_cash", "cut_food_rent", "search_any_work", "move_with_relatives", "keep_children_school"],
+  deepening: ["cut_food_rent", "search_any_work", "move_with_relatives", "keep_children_school", "sell_possessions", "join_mutual_aid", "hoard_relief"],
+  bank_holiday: ["apply_public_works", "trust_reopened_bank", "accept_relief", "move_for_work_camp", "organize_neighbors", "delay_medical_care", "contribute_community_pot"],
+  work_relief: ["stay_public_works", "repair_health", "organize_neighbors", "move_for_work_camp", "rebuild_savings", "trust_reopened_bank", "hoard_relief"],
+  second: ["stay_public_works", "seek_defense_work", "rebuild_savings", "repair_health", "support_union", "older_child_fulltime", "undercut_wages"],
+  defense_shift: ["seek_defense_work", "rebuild_savings", "repair_health", "support_union", "keep_children_school", "move_better_rental", "inform_on_black_market"],
+  recovery: ["seek_defense_work", "rebuild_savings", "repair_health", "keep_children_school", "contribute_community_pot", "hoard_relief"],
+  results: [],
+});
+
+const BACKGROUND_ACTIONS = Object.freeze({
+  Carter: "factory_overtime", Rosen: "shopkeeper_extend_credit", Williams: "tenant_sell_crop_early",
+  Novak: "immigrant_english_classes", "O'Connor": "railroad_follow_work", Bianchi: "garment_piecework_home",
+  Johnson: "service_laundry_clients", Kowalski: "miner_company_store", Martinez: "seasonal_follow_harvest",
+});
+const BACKGROUND_PHASES = new Set(["postwar", "recession_1921", "crash", "deepening", "bank_holiday", "work_relief", "second", "defense_shift", "recovery"]);
+const SABOTAGE_IDS = ["rival_undercut_work", "rival_spread_bank_rumors", "rival_call_in_debt", "rival_block_relief"];
+const EXTREME_RULES = [
+  ["seek_charity_clinic", "health", "lt", 25], ["send_family_to_country", "health", "lt", 25],
+  ["pawn_heirloom", "savings", "lt", 20], ["take_desperate_work", "food", "lt", 20],
+  ["sponsor_neighbor", "stability", "gt", 80], ["fund_training", "savings", "gt", 80],
+];
+const FINAL_BONUS_RULES = [
+  ["final_food_surplus", "food"], ["final_health_shift", "health"], ["final_savings_invest", "savings"],
+  ["final_hope_leadership", "hope"], ["final_education_training", "education"], ["final_stability_settle", "stability"],
+];
+
+function actionCard(id) {
+  const copy = ACTION_COPY[id];
+  return copy ? { id, ...copy, impact: ACTION_IMPACTS[id] || {} } : null;
+}
+
+function availableActionsFor({ family, phaseId, hardMode = false }) {
+  if (!family || family.gameOver) return [];
+  let ids = [...(PHASE_ACTION_IDS[phaseId] || [])];
+  const backgroundId = BACKGROUND_PHASES.has(phaseId) ? BACKGROUND_ACTIONS[family.name] : null;
+  if (backgroundId) {
+    const moveIndex = ids.indexOf("move_to_city");
+    if (moveIndex >= 0) ids.splice(moveIndex, 1, backgroundId);
+    else if (!ids.includes(backgroundId)) ids.splice(Math.min(2, ids.length), 0, backgroundId);
+  }
+  const conditionalIds = [];
+  if (family.collapseWarning?.emergencyChoiceId) conditionalIds.push(family.collapseWarning.emergencyChoiceId);
+  if (phaseId === "recovery") {
+    conditionalIds.push(...FINAL_BONUS_RULES.filter(([, metric]) => (family[metric] || 0) >= 75)
+      .sort((a, b) => (family[b[1]] || 0) - (family[a[1]] || 0)).slice(0, 2).map(([id]) => id));
+  }
+  conditionalIds.push(...EXTREME_RULES.filter(([, metric, operator, threshold]) =>
+    operator === "lt" ? (family[metric] || 0) < threshold : (family[metric] || 0) > threshold
+  ).slice(0, 2).map(([id]) => id));
+  if (family.employmentShock?.phaseId === phaseId) conditionalIds.unshift("accept_relief", "take_desperate_work");
+  ids.push(...conditionalIds.slice(0, 4));
+  if (hardMode && family.rivalId && !["postwar", "results"].includes(phaseId)) ids.push(...SABOTAGE_IDS);
+  return [...new Set(ids)].map(actionCard).filter(Boolean);
+}
+
+module.exports = { ACTION_IMPACTS, PHASE_ACTION_IDS, availableActionsFor };

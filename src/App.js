@@ -68,12 +68,6 @@ const COOPERATIVE_CHOICES = new Set(["join_mutual_aid", "organize_neighbors", "s
 const SABOTAGE_CHOICE_IDS = ["rival_undercut_work", "rival_spread_bank_rumors", "rival_call_in_debt", "rival_block_relief"];
 const BETRAYAL_CHOICES = new Set(["hoard_relief", "undercut_wages", "inform_on_black_market", ...SABOTAGE_CHOICE_IDS]);
 const RIVAL_WINDOW_PHASES = new Set(["speculation", "deepening"]);
-const EMERGENCY_CHOICE_LABELS = {
-  emergency_health: ["Emergency clinic visit", "Danger: treat health now or the family may receive a closing screen next phase."],
-  emergency_food: ["Emergency food line", "Danger: secure food now or the family may receive a closing screen next phase."],
-  emergency_hope: ["Emergency family reset", "Danger: rebuild hope now or the family may receive a closing screen next phase."],
-  emergency_debt: ["Emergency debt settlement", "Danger: settle debt now or the family may receive a closing screen next phase."],
-};
 const RISK_CHOICES = new Set(["invest_stocks", "borrow_to_invest", "move_to_city", "withdraw_bank_cash", "search_any_work", "move_for_work_camp", "seek_defense_work", "support_union", "take_desperate_work", "undercut_wages", "inform_on_black_market", "railroad_follow_work", "miner_company_store", "seasonal_follow_harvest", ...SABOTAGE_CHOICE_IDS]);
 const WORK_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "final_education_training", "final_health_shift", "undercut_wages", "factory_overtime", "railroad_follow_work", "garment_piecework_home", "service_laundry_clients", "seasonal_follow_harvest"]);
 const WORK_OR_RELIEF_CHOICES = new Set(["keep_factory_job", "search_any_work", "apply_public_works", "stay_public_works", "seek_defense_work", "take_desperate_work", "older_child_fulltime", "accept_relief", "seek_charity_clinic", "hoard_relief", "factory_overtime", "railroad_follow_work", "garment_piecework_home", "service_laundry_clients", "miner_company_store", "seasonal_follow_harvest"]);
@@ -197,24 +191,6 @@ const ACTION_METRIC_LABELS = {
   stability: "Stability",
   stock: "Stock",
 };
-const BACKGROUND_ACTIONS = {
-  Carter: ["factory_overtime", "Take extra factory shift", "Factory household: more pay, more strain."],
-  Rosen: ["shopkeeper_extend_credit", "Extend customer credit", "Shopkeepers: earn loyalty, tie up cash."],
-  Williams: ["tenant_sell_crop_early", "Sell crop early", "Tenant farmers: cash now, less food security."],
-  Novak: ["immigrant_english_classes", "Attend English night class", "New arrivals: build standing and skills, lose income time."],
-  "O'Connor": ["railroad_follow_work", "Follow rail work", "Rail family: chase pay along the line, unsettle home."],
-  Bianchi: ["garment_piecework_home", "Take garment piecework home", "Garment workers: extra income, schooling and morale suffer."],
-  Johnson: ["service_laundry_clients", "Take laundry clients", "Service workers: side income and reputation, exhausting hours."],
-  Kowalski: ["miner_company_store", "Use company store credit", "Mining household: food now, company debt later."],
-  Martinez: ["seasonal_follow_harvest", "Follow the harvest", "Seasonal laborers: food and wages, fragile stability."],
-};
-const BACKGROUND_ACTION_PHASES = new Set(["postwar", "recession_1921", "crash", "deepening", "bank_holiday", "work_relief", "second", "defense_shift", "recovery"]);
-const SABOTAGE_CHOICES = [
-  ["rival_undercut_work", "Undercut rival wages", "Hard Mode: compete for scarce work. Your rival loses work momentum if the board turns against them."],
-  ["rival_spread_bank_rumors", "Spread bank rumors", "Hard Mode: shake confidence around your rival's savings and bank trust."],
-  ["rival_call_in_debt", "Call in a private debt", "Hard Mode: squeeze your rival's cash cushion, but your trust takes a hit."],
-  ["rival_block_relief", "Block relief access", "Hard Mode: use reputation pressure to make relief harder for your rival."],
-];
 const SCENARIO_OPTIONS = [
   {
     id: "easy_credit",
@@ -514,145 +490,6 @@ const phases = [
     choices: [],
   },
 ];
-
-const extremeChoiceRules = [
-  {
-    id: "seek_charity_clinic",
-    title: "Seek charity clinic",
-    detail: "Health crisis: recover health, but lose savings and hope.",
-    when: (family) => family.health < 25,
-  },
-  {
-    id: "send_family_to_country",
-    title: "Send family to relatives",
-    detail: "Health crisis: protect food and health, but reduce stability.",
-    when: (family) => family.health < 25,
-  },
-  {
-    id: "pawn_heirloom",
-    title: "Pawn family heirloom",
-    detail: "Savings crisis: raise cash fast, but hurt hope.",
-    when: (family) => family.savings < 20,
-  },
-  {
-    id: "take_desperate_work",
-    title: "Take dangerous work",
-    detail: "Food crisis: bring income and food, risk health.",
-    when: (family) => family.food < 20,
-  },
-  {
-    id: "sponsor_neighbor",
-    title: "Sponsor a neighbor",
-    detail: "High stability: build support, spend savings.",
-    when: (family) => family.stability > 80,
-  },
-  {
-    id: "fund_training",
-    title: "Fund training",
-    detail: "High savings: improve education and future resilience.",
-    when: (family) => family.savings > 80,
-  },
-];
-
-const finalBonusChoiceRules = [
-  {
-    id: "final_food_surplus",
-    title: "Share a stocked pantry",
-    detail: "High food: convert surplus into trust and stability.",
-    metric: "food",
-    when: (family) => family.food >= 75,
-  },
-  {
-    id: "final_health_shift",
-    title: "Take a double shift",
-    detail: "High health: earn extra income before the final ledger.",
-    metric: "health",
-    when: (family) => family.health >= 75,
-  },
-  {
-    id: "final_savings_invest",
-    title: "Make a careful investment",
-    detail: "High savings: turn cash into long-term stability.",
-    metric: "savings",
-    when: (family) => family.savings >= 75,
-  },
-  {
-    id: "final_hope_leadership",
-    title: "Rally the neighborhood",
-    detail: "High hope: lift trust and protect the community pot.",
-    metric: "hope",
-    when: (family) => family.hope >= 75,
-  },
-  {
-    id: "final_education_training",
-    title: "Train for skilled work",
-    detail: "High education: claim better work and future security.",
-    metric: "education",
-    when: (family) => family.education >= 75,
-  },
-  {
-    id: "final_stability_settle",
-    title: "Settle the household",
-    detail: "High stability: lock in resilience and reduce debt pressure.",
-    metric: "stability",
-    when: (family) => family.stability >= 75,
-  },
-];
-
-function getExtremeChoices(family, phaseId) {
-  if (!family) return [];
-  const emergencyId = family.collapseWarning?.emergencyChoiceId;
-  const emergencyChoices = emergencyId && EMERGENCY_CHOICE_LABELS[emergencyId]
-    ? [[emergencyId, ...EMERGENCY_CHOICE_LABELS[emergencyId]]]
-    : [];
-  const finalBonusChoices = phaseId === "recovery"
-    ? finalBonusChoiceRules
-        .filter((rule) => rule.when(family))
-        .sort((a, b) => (family[b.metric] || 0) - (family[a.metric] || 0))
-        .slice(0, 2)
-        .map(({ id, title, detail }) => [id, title, detail])
-    : [];
-  const choices = extremeChoiceRules
-    .filter((rule) => rule.when(family))
-    .slice(0, 2)
-    .map(({ id, title, detail }) => [id, title, detail]);
-  if (family.employmentShock?.phaseId === phaseId) {
-    choices.unshift(
-      ["accept_relief", "Apply for emergency relief", "Job loss: protect food and health, but take a pride cost."],
-      ["take_desperate_work", "Take desperate day work", "Job loss: gain food and cash, risk health and stability."]
-    );
-  }
-  return [...emergencyChoices, ...finalBonusChoices, ...choices].slice(0, 4);
-}
-
-function getSabotageChoices(family, phaseId, scenario) {
-  if (!scenario?.hardMode || phaseId === "results" || phaseId === "postwar") return [];
-  if (!family?.rivalId || family?.gameOver) return [];
-  return SABOTAGE_CHOICES;
-}
-
-function backgroundChoiceFor(family) {
-  return family ? BACKGROUND_ACTIONS[family.name] : null;
-}
-
-function choicesForFamily(phaseChoices, family, phaseId) {
-  const backgroundChoice = backgroundChoiceFor(family);
-  if (!backgroundChoice || !BACKGROUND_ACTION_PHASES.has(phaseId)) return phaseChoices;
-  const [backgroundId] = backgroundChoice;
-  let didUseBackground = false;
-  const contextualChoices = phaseChoices.map((choice) => {
-    if (choice[0] !== "move_to_city") return choice;
-    didUseBackground = true;
-    return backgroundChoice;
-  });
-  if (didUseBackground || contextualChoices.some(([id]) => id === backgroundId)) return contextualChoices;
-  const insertAt = Math.min(2, contextualChoices.length);
-  return [
-    ...contextualChoices.slice(0, insertAt),
-    backgroundChoice,
-    ...contextualChoices.slice(insertAt),
-  ];
-}
 
 function familyImageFor(family) {
   if (!family) return "family-profile.png";
@@ -1126,6 +963,7 @@ function App() {
   const [hostToken, setHostToken] = useState(savedGame.hostToken || "");
   const [playerToken, setPlayerToken] = useState(savedGame.playerToken || "");
   const [actionImpacts, setActionImpacts] = useState(savedGame.actionImpacts || {});
+  const [availableActions, setAvailableActions] = useState(savedGame.availableActions || []);
   const [players, setPlayers] = useState(savedGame.players || []);
   const [shared, setShared] = useState(savedGame.shared || null);
   const [scenario, setScenario] = useState(savedGame.scenario || null);
@@ -1172,16 +1010,10 @@ function App() {
   const townHall = shared?.townHall || null;
   const submittedClaim = activePlayer?.provisionalClaims?.[phase.id] || "";
   const townHallReady = isResultsPhase || !townHall || townHall.resolved;
-  const activeChoices = useMemo(() => {
-    if (activePlayer?.gameOver) return [];
-    if (!phase.choices.length) return phase.choices;
-    const baseChoices = choicesForFamily(phase.choices, activePlayer, phase.id);
-    const existingChoiceIds = new Set(baseChoices.map(([id]) => id));
-    const extremeChoices = getExtremeChoices(activePlayer, phase.id).filter(([id]) => !existingChoiceIds.has(id));
-    const allExistingIds = new Set([...baseChoices, ...extremeChoices].map(([id]) => id));
-    const sabotageChoices = getSabotageChoices(activePlayer, phase.id, scenario).filter(([id]) => !allExistingIds.has(id));
-    return [...baseChoices, ...extremeChoices, ...sabotageChoices];
-  }, [activePlayer, phase, scenario]);
+  const activeChoices = useMemo(
+    () => activePlayer?.gameOver ? [] : availableActions.map(({ id, title, detail }) => [id, title, detail]),
+    [activePlayer?.gameOver, availableActions]
+  );
   const scoredPlayers = useMemo(
     () => players.map((p) => ({ ...p, score: scoreFamily(p) })).sort((a, b) => b.score - a.score),
     [players]
@@ -1285,6 +1117,7 @@ function App() {
         hostToken,
         playerToken,
         actionImpacts,
+        availableActions,
         players,
         shared,
         scenario,
@@ -1307,7 +1140,7 @@ function App() {
         joinClientId: joinClientIdRef.current,
       })
     );
-  }, [view, roomCode, hostToken, playerToken, actionImpacts, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, activeStation, soundEnabled, telegramArchive, readTelegramKeys, dismissedNoticeKeys, dismissedPolicyKeys, dismissedReceiptKeys, lastSyncedAt]);
+  }, [view, roomCode, hostToken, playerToken, actionImpacts, availableActions, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, activeStation, soundEnabled, telegramArchive, readTelegramKeys, dismissedNoticeKeys, dismissedPolicyKeys, dismissedReceiptKeys, lastSyncedAt]);
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
@@ -1363,6 +1196,7 @@ function App() {
     setRoomCode(room.roomCode);
     setPlayers(room.players || []);
     setActionImpacts(room.actions || {});
+    setAvailableActions(room.availableActions || []);
     setShared(room.shared || null);
     setScenario(room.scenario || null);
     setRematchScenario(room.rematchScenario || null);

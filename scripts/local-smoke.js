@@ -167,15 +167,81 @@ async function assertAuthoritativeActionCatalog(baseUrl) {
   }
 }
 
+async function assertServerSelectsFamilyHand(baseUrl) {
+  const created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({}) });
+  const roomCode = created.room.roomCode;
+  const joins = [];
+  for (let index = 0; index < 3; index += 1) {
+    joins.push(await request(baseUrl, `/rooms/${roomCode}/join`, {
+      method: "POST",
+      body: JSON.stringify({ player_name: `Hand Probe ${index + 1}`, client_id: `hand-probe-${Date.now()}-${index}` }),
+    }));
+  }
+  const farmer = joins[2];
+  const hand = farmer.room.availableActions || [];
+  if (!hand.some((action) => action.id === "tenant_sell_crop_early")) {
+    throw new Error("Expected the backend to add the tenant farmer's background card.");
+  }
+  if (hand.some((action) => action.id === "move_to_city")) {
+    throw new Error("Expected the backend to replace Move closer to work for a tenant farmer.");
+  }
+  if (hand.some((action) => !action.title || !action.detail || !action.impact)) {
+    throw new Error("Expected every backend-selected card to include display copy and authoritative impacts.");
+  }
+}
+
+async function assertEightPlayerAuthoritativeRound(baseUrl) {
+  const created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({}) });
+  const roomCode = created.room.roomCode;
+  const stamp = Date.now();
+  const joined = await Promise.all(Array.from({ length: MAX_PLAYERS }, (_, index) =>
+    request(baseUrl, `/rooms/${roomCode}/join`, {
+      method: "POST",
+      body: JSON.stringify({ player_name: `Authority ${index + 1}`, client_id: `authority-${stamp}-${index}` }),
+    })
+  ));
+  if (joined.some((entry) => !entry.playerToken || entry.room.availableActions.length < 6)) {
+    throw new Error("Expected all eight players to receive a token and a server-selected opening hand.");
+  }
+  await Promise.all(joined.map((entry, index) => request(baseUrl, `/rooms/${roomCode}/town-hall-claim`, {
+    method: "POST",
+    body: JSON.stringify({
+      player_id: entry.playerId,
+      player_token: entry.playerToken,
+      claim: ["work", "relief", "community", "household"][index % 4],
+    }),
+  })));
+  await Promise.all(joined.map((entry) => request(baseUrl, `/rooms/${roomCode}/choices`, {
+    method: "POST",
+    body: JSON.stringify({
+      player_id: entry.playerId,
+      player_token: entry.playerToken,
+      choices: ["keep_factory_job", "contribute_community_pot"],
+    }),
+  })));
+  const hostView = await request(baseUrl, `/rooms/${roomCode}?host_token=${encodeURIComponent(created.hostToken)}`);
+  if (hostView.room.phaseIndex !== 1 || hostView.room.players.length !== MAX_PLAYERS) {
+    throw new Error("Expected eight authoritative submissions to advance the room exactly one phase.");
+  }
+}
+
 async function assertServerResolvesDisplayedImpact(baseUrl) {
   const created = await request(baseUrl, "/rooms", {
     method: "POST",
-    body: JSON.stringify({ test_family_overrides: { debt: 80 } }),
+    body: JSON.stringify({ scenario_id: "easy_credit", test_family_overrides: { debt: 80 } }),
   });
   const roomCode = created.room.roomCode;
   const joined = await request(baseUrl, `/rooms/${roomCode}/join`, {
     method: "POST",
     body: JSON.stringify({ player_name: "Debt Probe", client_id: `debt-probe-${Date.now()}` }),
+  });
+  await request(baseUrl, `/rooms/${roomCode}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ host_token: created.hostToken }),
+  });
+  await request(baseUrl, `/rooms/${roomCode}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ host_token: created.hostToken }),
   });
   await request(baseUrl, `/rooms/${roomCode}/town-hall-claim`, {
     method: "POST",
@@ -186,7 +252,7 @@ async function assertServerResolvesDisplayedImpact(baseUrl) {
     body: JSON.stringify({
       player_id: joined.playerId,
       player_token: joined.playerToken,
-      choices: ["keep_factory_job", "pay_down_debt"],
+      choices: ["night_school", "pay_down_debt"],
     }),
   });
   if (resolved.actionResult?.baseImpacts?.pay_down_debt?.debt !== -24) {
@@ -196,8 +262,8 @@ async function assertServerResolvesDisplayedImpact(baseUrl) {
     throw new Error(`Expected the rushed action receipt to record the applied debt delta, got ${JSON.stringify(resolved.actionResult)}.`);
   }
   const family = resolved.room.players.find((player) => player.id === joined.playerId);
-  if (family?.debt !== 60) {
-    throw new Error(`Expected the returned family ledger to match the applied debt value 60, got ${family?.debt}.`);
+  if (family?.debt !== 67) {
+    throw new Error(`Expected the returned ledger to include the boom's shared debt pressure after the action, got ${family?.debt}.`);
   }
 }
 
@@ -395,6 +461,8 @@ async function assertRematchJoinLink(baseUrl) {
 async function main() {
   const baseUrl = getBaseUrl();
   await assertAuthoritativeActionCatalog(baseUrl);
+  await assertServerSelectsFamilyHand(baseUrl);
+  await assertEightPlayerAuthoritativeRound(baseUrl);
   await assertServerResolvesDisplayedImpact(baseUrl);
   await assertPrivateRoomProjections(baseUrl);
   if (process.env.PRIVACY_ONLY === "1") {

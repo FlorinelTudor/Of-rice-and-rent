@@ -14,7 +14,7 @@ const {
   resolvePolicyVote,
   scaledImpact,
 } = require("../../game/shared-rules");
-const { ACTION_IMPACTS } = require("../../game/action-catalog");
+const { ACTION_IMPACTS, availableActionsFor } = require("../../game/action-catalog");
 const { BlobError, get, list, put } = require("@vercel/blob");
 
 const MAX_PLAYERS = 8;
@@ -413,10 +413,12 @@ function roomViewer(req, room, body = {}) {
 function publicRoom(room, viewer = {}) {
   const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
   const scenario = { ...scenarioById(room.scenario_id), hardMode: Boolean(room.hard_mode) };
+  const viewingPlayer = viewer.playerId ? room.players.find((player) => player.id === viewer.playerId) : null;
   return {
     roomCode: room.room_code,
     phaseIndex: room.phase_index,
     actions: ACTION_IMPACTS,
+    availableActions: availableActionsFor({ family: viewingPlayer, phaseId, hardMode: room.hard_mode }),
     players: (room.players || []).map((player) =>
       viewer.host || viewer.playerId === player.id ? privatePlayer(player) : publicPlayer(player, phaseId)
     ),
@@ -1348,6 +1350,10 @@ async function handleGameRequest(req, res) {
     const phaseStartedAt = Date.parse(room.phase_started_at || room.updated_at || room.created_at || new Date().toISOString());
     const rushed = Date.now() - phaseStartedAt < MIN_THINKING_TIME_MS;
     const selectedChoices = (body.choices || []).slice(0, 2);
+    const allowedChoices = new Set(availableActionsFor({ family: room.players[playerIndex], phaseId, hardMode: room.hard_mode }).map((action) => action.id));
+    if (selectedChoices.length !== 2 || selectedChoices.some((choice) => !allowedChoices.has(choice))) {
+      return json(res, 400, { detail: "Choose exactly two cards from your current hand." });
+    }
     if (hasMultipleWorkChoices(selectedChoices)) return json(res, 400, { detail: "Choose only one work action this round." });
     if (hasMultipleSabotageChoices(selectedChoices)) return json(res, 400, { detail: "Choose only one sabotage action this round." });
     if (selectedChoices.some((choice) => SABOTAGE_CHOICES.has(choice)) && (!room.hard_mode || !room.players[playerIndex].rivalId)) {

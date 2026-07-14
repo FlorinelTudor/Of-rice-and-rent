@@ -17,7 +17,7 @@ const {
   resolvePolicyVote,
   scaledImpact,
 } = require("../game/shared-rules");
-const { ACTION_IMPACTS } = require("../game/action-catalog");
+const { ACTION_IMPACTS, availableActionsFor } = require("../game/action-catalog");
 const path = require("path");
 
 const MAX_PLAYERS = 8;
@@ -405,10 +405,12 @@ function roomViewer(req, room) {
 function publicRoom(room, viewer = {}) {
   const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
   const scenario = { ...scenarioById(room.scenario_id), hardMode: Boolean(room.hard_mode) };
+  const viewingPlayer = viewer.playerId ? room.players.find((player) => player.id === viewer.playerId) : null;
   return {
     roomCode: room.room_code,
     phaseIndex: room.phase_index,
     actions: ACTION_IMPACTS,
+    availableActions: availableActionsFor({ family: viewingPlayer, phaseId, hardMode: room.hard_mode }),
     players: (room.players || []).map((player) =>
       viewer.host || viewer.playerId === player.id ? privatePlayer(player) : publicPlayer(player, phaseId)
     ),
@@ -1226,6 +1228,11 @@ app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
   let actionResult = null;
   if ((room.players[index].choices?.[phaseId] || []).length !== 2) {
     const choices = (req.body.choices || []).slice(0, 2);
+    const allowedChoices = new Set(availableActionsFor({ family: room.players[index], phaseId, hardMode: room.hard_mode }).map((action) => action.id));
+    if (choices.length !== 2 || choices.some((choice) => !allowedChoices.has(choice))) {
+      res.status(400).json({ detail: "Choose exactly two cards from your current hand." });
+      return;
+    }
     if (hasMultipleWorkChoices(choices)) {
       res.status(400).json({ detail: "Choose only one work action this round." });
       return;
