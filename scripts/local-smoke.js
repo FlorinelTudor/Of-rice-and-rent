@@ -157,6 +157,50 @@ async function assertPrivateRoomProjections(baseUrl) {
   }
 }
 
+async function assertAuthoritativeActionCatalog(baseUrl) {
+  const catalog = await request(baseUrl, "/actions");
+  if (catalog.actions?.pay_down_debt?.debt !== -24) {
+    throw new Error("Expected the backend action catalogue to own the pay_down_debt effect.");
+  }
+  if (catalog.actions?.invest_stocks?.stock !== 26 || catalog.actions?.emergency_health?.health !== 38) {
+    throw new Error("Expected standard and emergency cards to share the authoritative backend catalogue.");
+  }
+}
+
+async function assertServerResolvesDisplayedImpact(baseUrl) {
+  const created = await request(baseUrl, "/rooms", {
+    method: "POST",
+    body: JSON.stringify({ test_family_overrides: { debt: 80 } }),
+  });
+  const roomCode = created.room.roomCode;
+  const joined = await request(baseUrl, `/rooms/${roomCode}/join`, {
+    method: "POST",
+    body: JSON.stringify({ player_name: "Debt Probe", client_id: `debt-probe-${Date.now()}` }),
+  });
+  await request(baseUrl, `/rooms/${roomCode}/town-hall-claim`, {
+    method: "POST",
+    body: JSON.stringify({ player_id: joined.playerId, player_token: joined.playerToken, claim: "household" }),
+  });
+  const resolved = await request(baseUrl, `/rooms/${roomCode}/choices`, {
+    method: "POST",
+    body: JSON.stringify({
+      player_id: joined.playerId,
+      player_token: joined.playerToken,
+      choices: ["keep_factory_job", "pay_down_debt"],
+    }),
+  });
+  if (resolved.actionResult?.baseImpacts?.pay_down_debt?.debt !== -24) {
+    throw new Error(`Expected the action receipt to preserve the printed -24 debt effect, got ${JSON.stringify(resolved.actionResult)}.`);
+  }
+  if (resolved.actionResult?.deltas?.debt !== -20 || resolved.actionResult?.after?.debt !== 60) {
+    throw new Error(`Expected the rushed action receipt to record the applied debt delta, got ${JSON.stringify(resolved.actionResult)}.`);
+  }
+  const family = resolved.room.players.find((player) => player.id === joined.playerId);
+  if (family?.debt !== 60) {
+    throw new Error(`Expected the returned family ledger to match the applied debt value 60, got ${family?.debt}.`);
+  }
+}
+
 async function createFullRoom(baseUrl, prefix) {
   const created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({}) });
   const roomCode = created.room.roomCode;
@@ -350,6 +394,8 @@ async function assertRematchJoinLink(baseUrl) {
 
 async function main() {
   const baseUrl = getBaseUrl();
+  await assertAuthoritativeActionCatalog(baseUrl);
+  await assertServerResolvesDisplayedImpact(baseUrl);
   await assertPrivateRoomProjections(baseUrl);
   if (process.env.PRIVACY_ONLY === "1") {
     console.log("Private room projection smoke passed.");

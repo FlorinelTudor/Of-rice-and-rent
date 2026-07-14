@@ -21,6 +21,10 @@ const player = {
   choices: {},
 };
 
+const actionImpacts = {
+  keep_factory_job: { food: 6, savings: 9, hope: -5, stability: 16 },
+};
+
 const room = {
   roomCode: "TEST",
   players: [player],
@@ -47,6 +51,7 @@ function savedPlayerState() {
     phaseIndex: room.phaseIndex,
     activePlayerId: player.id,
     playerName: player.playerName,
+    actionImpacts,
   };
 }
 

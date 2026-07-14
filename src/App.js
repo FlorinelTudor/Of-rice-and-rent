@@ -185,74 +185,6 @@ const ACTION_CARD_ART_BY_ERA = {
     accept_relief: "action-accept-relief-bust-v2.png",
   },
 };
-const ACTION_CARD_IMPACTS = {
-  factory_overtime: { savings: 15, health: -8, stability: 5 },
-  shopkeeper_extend_credit: { reputation: 13, hope: 7, savings: -12 },
-  tenant_sell_crop_early: { savings: 16, food: -10, hope: -4 },
-  immigrant_english_classes: { education: 15, reputation: 7, savings: -8 },
-  railroad_follow_work: { savings: 14, stability: -9, health: -4 },
-  garment_piecework_home: { savings: 12, education: -7, hope: -5 },
-  service_laundry_clients: { savings: 12, reputation: 9, health: -6 },
-  miner_company_store: { food: 13, debt: 13, hope: -5 },
-  seasonal_follow_harvest: { food: 12, savings: 11, stability: -11 },
-  accept_relief: { food: 19, health: 10, hope: -7 },
-  borrow_to_invest: { savings: 28, stock: 38, debt: 24, hope: 12, stability: -12 },
-  build_emergency_fund: { savings: 16, hope: -4, stability: 11 },
-  buy_radio_credit: { hope: 15, debt: 16, savings: -5 },
-  cut_food_rent: { food: -20, health: -14, savings: 16, stability: -12 },
-  delay_medical_care: { savings: 13, health: -22 },
-  emergency_debt: { debt: -38, savings: -20, hope: -6, stability: 5 },
-  emergency_health: { health: 38, savings: -18, debt: 12, hope: 4 },
-  emergency_hope: { hope: 38, savings: -10, stability: 8 },
-  final_education_training: { education: 10, savings: 14, stability: 8 },
-  final_food_surplus: { food: -8, stability: 12, hope: 8, reputation: 8 },
-  final_health_shift: { savings: 16, hope: 8, health: -6 },
-  final_hope_leadership: { hope: 8, stability: 9, reputation: 12 },
-  final_savings_invest: { stability: 14, debt: -8, savings: -8 },
-  final_stability_settle: { stability: 12, debt: -12, hope: 6 },
-  fund_training: { education: 20, savings: -18, hope: 6 },
-  inform_on_black_market: { savings: 16, stability: 8, hope: -10, reputation: -16 },
-  keep_cash: { savings: 13, stability: 8, hope: -3 },
-  keep_factory_job: { food: 6, savings: 9, hope: -5, stability: 16 },
-  move_better_rental: { health: 13, hope: 10, debt: 9 },
-  move_to_city: { savings: -10, hope: 7, stability: -9 },
-  move_with_relatives: { debt: -10, stability: 9, hope: -16 },
-  night_school: { education: 17, savings: -9, hope: 4 },
-  older_child_fulltime: { savings: 16, education: -21, hope: -11 },
-  organize_neighbors: { hope: 14, stability: 13, savings: -5 },
-  pawn_heirloom: { savings: 24, hope: -18, stability: -6 },
-  pull_child_school: { savings: 13, education: -24, hope: -14 },
-  rebuild_savings: { savings: 20, hope: 5, stability: 5 },
-  repair_health: { health: 21, savings: -12 },
-  seek_charity_clinic: { health: 24, savings: -12, hope: -8 },
-  seek_defense_work: { savings: 20, hope: 16, stability: -5 },
-  sell_possessions: { savings: 18, hope: -15, stability: -7 },
-  sell_stocks_now: { savings: -14, stock: -28, stability: 10 },
-  send_family_to_country: { health: 16, food: 12, stability: -16, hope: -5 },
-  sponsor_neighbor: { hope: 12, stability: 8, savings: -14 },
-  stay_public_works: { savings: 11, stability: 12 },
-  support_union: { hope: 11, stability: -10, savings: 11 },
-  take_desperate_work: { food: 16, savings: 14, health: -15, stability: -6 },
-  trust_reopened_bank: { bankTrust: 22, stability: 12 },
-  withdraw_bank_cash: { savings: 9, bankTrust: -22, stability: 7 },
-  invest_stocks: { savings: 22, stock: 26, hope: 10, stability: -4 },
-  undercut_wages: { savings: 19, stability: -12, hope: -8, reputation: -12 },
-  hoard_relief: { food: 18, savings: 8, hope: -5, reputation: -14 },
-  contribute_community_pot: { food: -8, savings: -5, hope: 6, stability: 7, reputation: 10 },
-  search_any_work: { savings: 12, health: -8, hope: 5 },
-  apply_public_works: { food: 15, savings: 13, health: -5, hope: 16 },
-  take_store_credit: { food: 8, debt: 17, hope: 5 },
-  pay_down_debt: { debt: -24, savings: -9, stability: 10 },
-  join_mutual_aid: { hope: 12, stability: 11, savings: -5 },
-  move_for_work_camp: { savings: 14, education: 7, hope: -10 },
-  emergency_food: { food: 38, hope: -6, reputation: -8 },
-  keep_children_school: { education: 18, savings: -13, hope: 6 },
-  use_savings_food: { food: 18, health: 9, savings: -17 },
-  rival_undercut_work: { savings: 8, reputation: -14, hope: -4 },
-  rival_spread_bank_rumors: { bankTrust: 6, reputation: -12, hope: -5 },
-  rival_call_in_debt: { savings: 10, reputation: -16, stability: -4 },
-  rival_block_relief: { food: 8, reputation: -18, hope: -5 },
-};
 const ACTION_METRIC_LABELS = {
   bankTrust: "Bank trust",
   debt: "Debt",
@@ -932,8 +864,8 @@ function choiceGridShape(count) {
   return { columns: 5, rows: Math.ceil(count / 5), layout: "dense" };
 }
 
-function choiceImpactChips(choiceId) {
-  const impact = ACTION_CARD_IMPACTS[choiceId];
+function choiceImpactChips(choiceId, actionImpacts) {
+  const impact = actionImpacts[choiceId];
   if (!impact) return [];
   return Object.entries(impact).map(([key, value]) => {
     const isBenefit = key === "debt" ? value < 0 : value > 0;
@@ -1193,6 +1125,7 @@ function App() {
   const [roomCode, setRoomCode] = useState(savedGame.roomCode || "");
   const [hostToken, setHostToken] = useState(savedGame.hostToken || "");
   const [playerToken, setPlayerToken] = useState(savedGame.playerToken || "");
+  const [actionImpacts, setActionImpacts] = useState(savedGame.actionImpacts || {});
   const [players, setPlayers] = useState(savedGame.players || []);
   const [shared, setShared] = useState(savedGame.shared || null);
   const [scenario, setScenario] = useState(savedGame.scenario || null);
@@ -1351,6 +1284,7 @@ function App() {
         roomCode,
         hostToken,
         playerToken,
+        actionImpacts,
         players,
         shared,
         scenario,
@@ -1373,7 +1307,7 @@ function App() {
         joinClientId: joinClientIdRef.current,
       })
     );
-  }, [view, roomCode, hostToken, playerToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, activeStation, soundEnabled, telegramArchive, readTelegramKeys, dismissedNoticeKeys, dismissedPolicyKeys, dismissedReceiptKeys, lastSyncedAt]);
+  }, [view, roomCode, hostToken, playerToken, actionImpacts, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, activeStation, soundEnabled, telegramArchive, readTelegramKeys, dismissedNoticeKeys, dismissedPolicyKeys, dismissedReceiptKeys, lastSyncedAt]);
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
@@ -1428,6 +1362,7 @@ function App() {
     const nextPhaseIndex = room.phaseIndex || 0;
     setRoomCode(room.roomCode);
     setPlayers(room.players || []);
+    setActionImpacts(room.actions || {});
     setShared(room.shared || null);
     setScenario(room.scenario || null);
     setRematchScenario(room.rematchScenario || null);
@@ -1941,7 +1876,7 @@ function App() {
                           const blockedByWorkRule = !selected.includes(id) && WORK_CHOICES.has(id) && selected.some((item) => WORK_CHOICES.has(item));
                           const blockedBySabotageRule = !selected.includes(id) && SABOTAGE_CHOICE_IDS.includes(id) && selected.some((item) => SABOTAGE_CHOICE_IDS.includes(item));
                           const cardArt = actionCardArtFor(id, phase.id);
-                          const chips = choiceImpactChips(id);
+                          const chips = choiceImpactChips(id, actionImpacts);
                           const edgeHoverShift = index === 0 ? 58 : index === activeChoices.length - 1 ? -58 : index === 1 ? 22 : index === activeChoices.length - 2 ? -22 : 0;
                           return (
                             <button

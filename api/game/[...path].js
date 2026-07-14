@@ -14,6 +14,7 @@ const {
   resolvePolicyVote,
   scaledImpact,
 } = require("../../game/shared-rules");
+const { ACTION_IMPACTS } = require("../../game/action-catalog");
 const { BlobError, get, list, put } = require("@vercel/blob");
 
 const MAX_PLAYERS = 8;
@@ -231,75 +232,6 @@ const OBJECTIVE_VARIANTS = {
   ],
 };
 
-const IMPACTS = {
-  factory_overtime: { savings: 15, health: -8, stability: 5 },
-  shopkeeper_extend_credit: { reputation: 13, hope: 7, savings: -12 },
-  tenant_sell_crop_early: { savings: 16, food: -10, hope: -4 },
-  immigrant_english_classes: { education: 15, reputation: 7, savings: -8 },
-  railroad_follow_work: { savings: 14, stability: -9, health: -4 },
-  garment_piecework_home: { savings: 12, education: -7, hope: -5 },
-  service_laundry_clients: { savings: 12, reputation: 9, health: -6 },
-  miner_company_store: { food: 13, debt: 13, hope: -5 },
-  seasonal_follow_harvest: { food: 12, savings: 11, stability: -11 },
-  keep_factory_job: { food: 6, savings: 9, hope: -5, stability: 16 },
-  use_savings_food: { food: 18, health: 9, savings: -17 },
-  move_to_city: { savings: -10, hope: 7, stability: -9 },
-  take_store_credit: { food: 8, debt: 17, hope: 5 },
-  pull_child_school: { savings: 13, education: -24, hope: -14 },
-  join_mutual_aid: { hope: 12, stability: 11, savings: -5 },
-  build_emergency_fund: { savings: 16, hope: -4, stability: 11 },
-  invest_stocks: { savings: 22, stock: 26, hope: 10, stability: -4 },
-  borrow_to_invest: { savings: 28, stock: 38, debt: 24, hope: 12, stability: -12 },
-  buy_radio_credit: { hope: 15, debt: 16, savings: -5 },
-  pay_down_debt: { debt: -24, savings: -9, stability: 10 },
-  night_school: { education: 17, savings: -9, hope: 4 },
-  keep_cash: { savings: 13, stability: 8, hope: -3 },
-  move_better_rental: { health: 13, hope: 10, debt: 9 },
-  sell_stocks_now: { savings: -14, stock: -28, stability: 10 },
-  withdraw_bank_cash: { savings: 9, bankTrust: -22, stability: 7 },
-  cut_food_rent: { food: -20, health: -14, savings: 16, stability: -12 },
-  search_any_work: { savings: 12, health: -8, hope: 5 },
-  move_with_relatives: { debt: -10, stability: 9, hope: -16 },
-  keep_children_school: { education: 18, savings: -13, hope: 6 },
-  sell_possessions: { savings: 18, hope: -15, stability: -7 },
-  apply_public_works: { food: 15, savings: 13, health: -5, hope: 16 },
-  trust_reopened_bank: { bankTrust: 22, stability: 12 },
-  accept_relief: { food: 19, health: 10, hope: -7 },
-  move_for_work_camp: { savings: 14, education: 7, hope: -10 },
-  organize_neighbors: { hope: 14, stability: 13, savings: -5 },
-  delay_medical_care: { savings: 13, health: -22 },
-  stay_public_works: { savings: 11, stability: 12 },
-  seek_defense_work: { savings: 20, hope: 16, stability: -5 },
-  rebuild_savings: { savings: 20, hope: 5, stability: 5 },
-  repair_health: { health: 21, savings: -12 },
-  support_union: { hope: 11, stability: -10, savings: 11 },
-  older_child_fulltime: { savings: 16, education: -21, hope: -11 },
-  seek_charity_clinic: { health: 24, savings: -12, hope: -8 },
-  send_family_to_country: { health: 16, food: 12, stability: -16, hope: -5 },
-  pawn_heirloom: { savings: 24, hope: -18, stability: -6 },
-  take_desperate_work: { food: 16, savings: 14, health: -15, stability: -6 },
-  sponsor_neighbor: { hope: 12, stability: 8, savings: -14 },
-  fund_training: { education: 20, savings: -18, hope: 6 },
-  contribute_community_pot: { food: -8, savings: -5, hope: 6, stability: 7, reputation: 10 },
-  hoard_relief: { food: 18, savings: 8, hope: -5, reputation: -14 },
-  undercut_wages: { savings: 19, stability: -12, hope: -8, reputation: -12 },
-  inform_on_black_market: { savings: 16, stability: 8, hope: -10, reputation: -16 },
-  final_food_surplus: { food: -8, stability: 12, hope: 8, reputation: 8 },
-  final_health_shift: { savings: 16, hope: 8, health: -6 },
-  final_savings_invest: { stability: 14, debt: -8, savings: -8 },
-  final_hope_leadership: { hope: 8, stability: 9, reputation: 12 },
-  final_education_training: { education: 10, savings: 14, stability: 8 },
-  final_stability_settle: { stability: 12, debt: -12, hope: 6 },
-  rival_undercut_work: SABOTAGE_EFFECTS.rival_undercut_work.attacker,
-  rival_spread_bank_rumors: SABOTAGE_EFFECTS.rival_spread_bank_rumors.attacker,
-  rival_call_in_debt: SABOTAGE_EFFECTS.rival_call_in_debt.attacker,
-  rival_block_relief: SABOTAGE_EFFECTS.rival_block_relief.attacker,
-  emergency_health: EMERGENCY_ACTIONS.health.impact,
-  emergency_food: EMERGENCY_ACTIONS.food.impact,
-  emergency_hope: EMERGENCY_ACTIONS.hope.impact,
-  emergency_debt: EMERGENCY_ACTIONS.debt.impact,
-};
-
 const ACTION_DYNAMICS = {
   factory_overtime: ["work"],
   shopkeeper_extend_credit: ["cooperate"],
@@ -484,6 +416,7 @@ function publicRoom(room, viewer = {}) {
   return {
     roomCode: room.room_code,
     phaseIndex: room.phase_index,
+    actions: ACTION_IMPACTS,
     players: (room.players || []).map((player) =>
       viewer.host || viewer.playerId === player.id ? privatePlayer(player) : publicPlayer(player, phaseId)
     ),
@@ -575,7 +508,7 @@ function applyChoices(family, choices, phaseId, options = {}) {
       next.exploitMarkers = (next.exploitMarkers || 0) + 1;
       next.reputation = clampReputation((next.reputation ?? 50) - 6);
     }
-    Object.entries(IMPACTS[choice] || {}).forEach(([key, value]) => {
+    Object.entries(ACTION_IMPACTS[choice] || {}).forEach(([key, value]) => {
       const impact = scaledImpact(key, value, multiplier);
       const current = next[key] || 0;
       if (key === "debt" || key === "stock") next[key] = Math.max(0, current + impact);
@@ -1272,6 +1205,7 @@ async function handleGameRequest(req, res) {
     .filter((part) => part !== "api");
   const routeParts = rawParts.length ? rawParts : urlParts;
   const parts = routeParts[0] === "game" ? routeParts.slice(1) : routeParts;
+  if (req.method === "GET" && parts[0] === "actions") return json(res, 200, { actions: ACTION_IMPACTS });
   if (parts[0] !== "rooms") return json(res, 404, { detail: "Not found" });
 
   if (req.method === "POST" && parts.length === 1) {
@@ -1428,6 +1362,14 @@ async function handleGameRequest(req, res) {
     }
     const startingPlayer = room.players[playerIndex];
     const updatedPlayer = applyChoices(startingPlayer, selectedChoices, phaseId, { rushed });
+    const actionResult = {
+      phaseId,
+      choices: selectedChoices,
+      baseImpacts: Object.fromEntries(selectedChoices.map((choice) => [choice, ACTION_IMPACTS[choice] || {}])),
+      before: metricSnapshot(startingPlayer),
+      after: metricSnapshot(updatedPlayer),
+      deltas: metricDeltas(metricSnapshot(startingPlayer), metricSnapshot(updatedPlayer)),
+    };
     updatedPlayer.roundSnapshots = { ...(startingPlayer.roundSnapshots || {}), [phaseId]: metricSnapshot(startingPlayer) };
     updatedPlayer.choices = { ...(room.players[playerIndex].choices || {}), [phaseId]: selectedChoices };
     await savePlayer(code, updatedPlayer);
@@ -1447,7 +1389,7 @@ async function handleGameRequest(req, res) {
     }
     room.updated_at = new Date().toISOString();
     await saveRoom(room);
-    return json(res, 200, { room: publicRoom(room, viewer) });
+    return json(res, 200, { room: publicRoom(room, viewer), actionResult });
   }
 
   if (req.method === "POST" && parts[2] === "rival") {
