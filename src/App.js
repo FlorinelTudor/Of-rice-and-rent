@@ -1192,6 +1192,7 @@ function App() {
   const [view, setView] = useState(savedGame.view || "start");
   const [roomCode, setRoomCode] = useState(savedGame.roomCode || "");
   const [hostToken, setHostToken] = useState(savedGame.hostToken || "");
+  const [playerToken, setPlayerToken] = useState(savedGame.playerToken || "");
   const [players, setPlayers] = useState(savedGame.players || []);
   const [shared, setShared] = useState(savedGame.shared || null);
   const [scenario, setScenario] = useState(savedGame.scenario || null);
@@ -1231,7 +1232,7 @@ function App() {
   const activePlayer = players.find((p) => p.id === activePlayerId) || null;
   const activeRoundPlayers = players.filter((p) => !p.gameOver);
   const submittedChoices = activePlayer?.choices?.[phase.id] || [];
-  const submittedCount = activeRoundPlayers.filter((p) => p.choices?.[phase.id]?.length === 2).length;
+  const submittedCount = activeRoundPlayers.filter((p) => p.submitted || p.choices?.[phase.id]?.length === 2).length;
   const policyVote = shared?.policyVote || null;
   const activePolicyKey = policyVote?.resolved ? `${policyVote.id}-${policyVote.result?.winnerId}` : "";
   const submittedPolicyOption = activePlayer?.policyVotes?.[phase.id] || "";
@@ -1349,6 +1350,7 @@ function App() {
         view,
         roomCode,
         hostToken,
+        playerToken,
         players,
         shared,
         scenario,
@@ -1371,7 +1373,7 @@ function App() {
         joinClientId: joinClientIdRef.current,
       })
     );
-  }, [view, roomCode, hostToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, activeStation, soundEnabled, telegramArchive, readTelegramKeys, dismissedNoticeKeys, dismissedPolicyKeys, dismissedReceiptKeys, lastSyncedAt]);
+  }, [view, roomCode, hostToken, playerToken, players, shared, scenario, rematchScenario, nextRoomCode, selectedScenarioId, selectedHardMode, phaseIndex, playerName, activePlayerId, selected, activeStation, soundEnabled, telegramArchive, readTelegramKeys, dismissedNoticeKeys, dismissedPolicyKeys, dismissedReceiptKeys, lastSyncedAt]);
 
   useEffect(() => {
     if (view !== "host" && view !== "player") return undefined;
@@ -1472,7 +1474,12 @@ function App() {
     let cancelled = false;
     const pullRoom = async () => {
       try {
-        const data = await gameApi(`/game/rooms/${roomCode}`);
+        const credentials = view === "host" && hostToken
+          ? `?host_token=${encodeURIComponent(hostToken)}`
+          : activePlayerId && playerToken
+            ? `?player_id=${encodeURIComponent(activePlayerId)}&player_token=${encodeURIComponent(playerToken)}`
+            : "";
+        const data = await gameApi(`/game/rooms/${roomCode}${credentials}`);
         if (!cancelled) {
           syncRoom(data.room);
           setApiError("");
@@ -1490,7 +1497,7 @@ function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [roomCode, view]);
+  }, [roomCode, view, hostToken, activePlayerId, playerToken]);
 
   useEffect(() => {
     if (rematchScenario?.id) setSelectedScenarioId(rematchScenario.id);
@@ -1507,6 +1514,7 @@ function App() {
     if (!data) return;
     syncRoom(data.room);
     setHostToken(data.hostToken || "");
+    setPlayerToken("");
     setActivePlayerId("");
     setSelected([]);
     setNextRoomCode("");
@@ -1544,6 +1552,7 @@ function App() {
     if (!data) return;
     syncRoom(data.room);
     setHostToken("");
+    setPlayerToken(data.playerToken || "");
     setActivePlayerId(data.playerId);
     setSelected([]);
     setView("player");
@@ -1562,6 +1571,7 @@ function App() {
     if (!data) return;
     syncRoom(data.room);
     setHostToken("");
+    setPlayerToken(data.playerToken || "");
     setActivePlayerId(data.playerId);
     setSelected([]);
     setView("player");
@@ -1617,7 +1627,7 @@ function App() {
     const data = await runGameRequest(() =>
       gameApi(`/game/rooms/${roomCode}/rival`, {
         method: "POST",
-        body: JSON.stringify({ player_id: activePlayer.id, rival_id: rivalId }),
+        body: JSON.stringify({ player_id: activePlayer.id, player_token: playerToken, rival_id: rivalId }),
       })
     );
     if (!data) return;
@@ -1629,7 +1639,7 @@ function App() {
     const data = await runGameRequest(() =>
       gameApi(`/game/rooms/${roomCode}/choices`, {
         method: "POST",
-        body: JSON.stringify({ player_id: activePlayer.id, choices: selected }),
+        body: JSON.stringify({ player_id: activePlayer.id, player_token: playerToken, choices: selected }),
       })
     );
     if (!data) return;
@@ -1643,7 +1653,7 @@ function App() {
     const data = await runGameRequest(() =>
       gameApi(`/game/rooms/${roomCode}/policy-vote`, {
         method: "POST",
-        body: JSON.stringify({ player_id: activePlayer.id, option_id: optionId }),
+        body: JSON.stringify({ player_id: activePlayer.id, player_token: playerToken, option_id: optionId }),
       })
     );
     if (data) syncRoom(data.room);
@@ -1666,7 +1676,7 @@ function App() {
     playTabletopSound("stamp", { enabled: soundEnabled, volume: 0.42 });
     const data = await runGameRequest(() => gameApi(`/game/rooms/${roomCode}/town-hall-claim`, {
       method: "POST",
-      body: JSON.stringify({ player_id: activePlayer.id, claim }),
+      body: JSON.stringify({ player_id: activePlayer.id, player_token: playerToken, claim }),
     }));
     if (data) syncRoom(data.room);
   }

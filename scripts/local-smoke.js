@@ -91,6 +91,72 @@ async function request(baseUrl, path, options = {}) {
   return payload;
 }
 
+async function requestStatus(baseUrl, path, options = {}) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: { "content-type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  const text = await response.text();
+  return { status: response.status, payload: text ? JSON.parse(text) : null };
+}
+
+async function assertPrivateRoomProjections(baseUrl) {
+  const created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({}) });
+  const roomCode = created.room.roomCode;
+  const first = await request(baseUrl, `/rooms/${roomCode}/join`, {
+    method: "POST",
+    body: JSON.stringify({ player_name: "Private One", client_id: `private-one-${Date.now()}` }),
+  });
+  const second = await request(baseUrl, `/rooms/${roomCode}/join`, {
+    method: "POST",
+    body: JSON.stringify({ player_name: "Private Two", client_id: `private-two-${Date.now()}` }),
+  });
+  if (!first.playerToken || !second.playerToken) throw new Error("Expected each joined player to receive a private token.");
+
+  const anonymous = await request(baseUrl, `/rooms/${roomCode}`);
+  if (anonymous.room.players.some((player) => typeof player.food === "number" || player.objectiveTitle || player.choices)) {
+    throw new Error("Expected anonymous room state to hide private family ledgers.");
+  }
+
+  const playerView = await request(
+    baseUrl,
+    `/rooms/${roomCode}?player_id=${encodeURIComponent(first.playerId)}&player_token=${encodeURIComponent(first.playerToken)}`
+  );
+  const ownFamily = playerView.room.players.find((player) => player.id === first.playerId);
+  const otherFamily = playerView.room.players.find((player) => player.id === second.playerId);
+  if (typeof ownFamily?.food !== "number" || typeof otherFamily?.food === "number") {
+    throw new Error("Expected a player room view to expose only that player's private ledger.");
+  }
+
+  const hostView = await request(baseUrl, `/rooms/${roomCode}?host_token=${encodeURIComponent(created.hostToken)}`);
+  if (hostView.room.players.some((player) => typeof player.food !== "number" || !player.objectiveTitle)) {
+    throw new Error("Expected the host room view to expose every private family ledger.");
+  }
+
+  const unauthorized = await requestStatus(baseUrl, `/rooms/${roomCode}/choices`, {
+    method: "POST",
+    body: JSON.stringify({ player_id: first.playerId, choices: ["keep_factory_job", "contribute_community_pot"] }),
+  });
+  if (unauthorized.status !== 403) {
+    throw new Error(`Expected an action without a player token to return 403, got ${unauthorized.status}.`);
+  }
+
+  const unauthorizedClaim = await requestStatus(baseUrl, `/rooms/${roomCode}/town-hall-claim`, {
+    method: "POST",
+    body: JSON.stringify({ player_id: first.playerId, claim: "work" }),
+  });
+  if (unauthorizedClaim.status !== 403) {
+    throw new Error(`Expected a Town Hall priority without a player token to return 403, got ${unauthorizedClaim.status}.`);
+  }
+  const authorizedClaim = await request(baseUrl, `/rooms/${roomCode}/town-hall-claim`, {
+    method: "POST",
+    body: JSON.stringify({ player_id: first.playerId, player_token: first.playerToken, claim: "work" }),
+  });
+  if (authorizedClaim.room.players.find((player) => player.id === first.playerId)?.provisionalClaims?.postwar !== "work") {
+    throw new Error("Expected an authenticated Town Hall priority to be stored and returned to its player.");
+  }
+}
+
 async function createFullRoom(baseUrl, prefix) {
   const created = await request(baseUrl, "/rooms", { method: "POST", body: JSON.stringify({}) });
   const roomCode = created.room.roomCode;
@@ -284,6 +350,11 @@ async function assertRematchJoinLink(baseUrl) {
 
 async function main() {
   const baseUrl = getBaseUrl();
+  await assertPrivateRoomProjections(baseUrl);
+  if (process.env.PRIVACY_ONLY === "1") {
+    console.log("Private room projection smoke passed.");
+    return;
+  }
   await assertScenarioSelection(baseUrl);
   await assertHardModeNemesis(baseUrl);
   await assertEmergencyCollapse(baseUrl);

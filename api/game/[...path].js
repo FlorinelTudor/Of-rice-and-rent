@@ -451,13 +451,42 @@ function roomCode() {
   return code;
 }
 
-function publicRoom(room) {
+function privatePlayer(player) {
+  const { playerToken, ...visible } = player;
+  return visible;
+}
+
+function publicPlayer(player, phaseId) {
+  return {
+    id: player.id,
+    playerName: player.playerName,
+    name: player.name,
+    role: player.role,
+    slot: player.slot,
+    score: player.score,
+    gameOver: player.gameOver || null,
+    submitted: (player.choices?.[phaseId] || []).length === 2,
+  };
+}
+
+function roomViewer(req, room, body = {}) {
+  const hostToken = req.query?.host_token || body.host_token;
+  if (hostToken && hostToken === room.host_token) return { host: true };
+  const playerId = req.query?.player_id || body.player_id;
+  const playerToken = req.query?.player_token || body.player_token;
+  const player = room.players.find((candidate) => candidate.id === playerId && candidate.playerToken === playerToken);
+  return player ? { playerId: player.id } : {};
+}
+
+function publicRoom(room, viewer = {}) {
   const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
   const scenario = { ...scenarioById(room.scenario_id), hardMode: Boolean(room.hard_mode) };
   return {
     roomCode: room.room_code,
     phaseIndex: room.phase_index,
-    players: room.players || [],
+    players: (room.players || []).map((player) =>
+      viewer.host || viewer.playerId === player.id ? privatePlayer(player) : publicPlayer(player, phaseId)
+    ),
     scenario,
     rematchScenario: room.phase_index >= PHASE_IDS.length - 1 ? rematchScenario(scenario.id) : null,
     nextRoomCode: room.next_room_code || null,
@@ -485,6 +514,7 @@ function pickFamily(playerName, index, clientId, overrides = null) {
     id: crypto.randomUUID(),
     playerName,
     clientId: clientId || crypto.randomUUID(),
+    playerToken: crypto.randomBytes(32).toString("base64url"),
     choices: {},
     score: 0,
     slot: index,
@@ -1207,7 +1237,13 @@ async function createRoom(scenarioId, options = {}) {
 async function addPlayer(code, playerName, clientId, familyOverrides = null, isDemo = false) {
   const players = await listPlayers(code);
   const existing = players.find((player) => player.clientId === clientId);
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.playerToken) {
+      existing.playerToken = crypto.randomBytes(32).toString("base64url");
+      await savePlayer(code, existing);
+    }
+    return existing;
+  }
   if (players.length >= MAX_PLAYERS) return null;
 
   for (let slot = 0; slot < MAX_PLAYERS; slot += 1) {
@@ -1259,7 +1295,7 @@ async function handleGameRequest(req, res) {
   const room = await readRoom(code);
   if (!room) return json(res, 404, { detail: "Room not found" });
 
-  if (req.method === "GET" && parts.length === 2) return json(res, 200, { room: publicRoom(room) });
+  if (req.method === "GET" && parts.length === 2) return json(res, 200, { room: publicRoom(room, roomViewer(req, room)) });
 
   const body = getBody(req);
   if (req.method === "POST" && parts[2] === "join") {
@@ -1271,10 +1307,16 @@ async function handleGameRequest(req, res) {
     room.players = await listPlayers(code);
     applyCollapseChecks(room, PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)], { allowGameOver: false });
     await Promise.all(room.players.map((currentPlayer) => savePlayer(code, currentPlayer)));
-    return json(res, 200, { room: publicRoom(room), playerId: player.id });
+    return json(res, 200, {
+      room: publicRoom(room, { playerId: player.id }),
+      playerId: player.id,
+      playerToken: player.playerToken,
+    });
   }
 
   if (req.method === "POST" && parts[2] === "policy-vote") {
+    const viewer = roomViewer(req, room, body);
+    if (viewer.playerId !== body.player_id) return json(res, 403, { detail: "A valid player token is required to vote." });
     const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
     const policy = policyVoteForPhase(phaseId);
     const player = room.players.find((candidate) => candidate.id === body.player_id && !candidate.gameOver);
@@ -1314,7 +1356,7 @@ async function handleGameRequest(req, res) {
     }
     room.updated_at = new Date().toISOString();
     await saveRoom(room);
-    return json(res, 200, { room: publicRoom(room) });
+    return json(res, 200, { room: publicRoom(room, viewer) });
   }
 
   if (req.method === "POST" && parts[2] === "policy-demo-votes") {
@@ -1356,6 +1398,10 @@ async function handleGameRequest(req, res) {
   }
 
   if (req.method === "POST" && parts[2] === "choices") {
+    const viewer = roomViewer(req, room, body);
+    if (viewer.playerId !== body.player_id) {
+      return json(res, 403, { detail: "A valid player token is required to submit decisions." });
+    }
     const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
     const policy = policyVoteForPhase(phaseId);
     if (policy && !room.policy_votes?.[phaseId]?.result?.resolved) {
@@ -1363,8 +1409,8 @@ async function handleGameRequest(req, res) {
     }
     const playerIndex = room.players.findIndex((player) => player.id === body.player_id);
     if (playerIndex < 0) return json(res, 404, { detail: "Player not found in this room" });
-    if (room.players[playerIndex].gameOver) return json(res, 200, { room: publicRoom(room) });
-    if ((room.players[playerIndex].choices?.[phaseId] || []).length === 2) return json(res, 200, { room: publicRoom(room) });
+    if (room.players[playerIndex].gameOver) return json(res, 200, { room: publicRoom(room, viewer) });
+    if ((room.players[playerIndex].choices?.[phaseId] || []).length === 2) return json(res, 200, { room: publicRoom(room, viewer) });
     const phaseStartedAt = Date.parse(room.phase_started_at || room.updated_at || room.created_at || new Date().toISOString());
     const rushed = Date.now() - phaseStartedAt < MIN_THINKING_TIME_MS;
     const selectedChoices = (body.choices || []).slice(0, 2);
@@ -1378,7 +1424,7 @@ async function handleGameRequest(req, res) {
     } catch (error) {
       if (!/already exists|overwrite/i.test(String(error.message || ""))) throw error;
       room.players = await listPlayers(code);
-      return json(res, 200, { room: publicRoom(room) });
+      return json(res, 200, { room: publicRoom(room, viewer) });
     }
     const startingPlayer = room.players[playerIndex];
     const updatedPlayer = applyChoices(startingPlayer, selectedChoices, phaseId, { rushed });
@@ -1401,10 +1447,14 @@ async function handleGameRequest(req, res) {
     }
     room.updated_at = new Date().toISOString();
     await saveRoom(room);
-    return json(res, 200, { room: publicRoom(room) });
+    return json(res, 200, { room: publicRoom(room, viewer) });
   }
 
   if (req.method === "POST" && parts[2] === "rival") {
+    const viewer = roomViewer(req, room, body);
+    if (viewer.playerId !== body.player_id) {
+      return json(res, 403, { detail: "A valid player token is required to nominate a rival." });
+    }
     if (!room.hard_mode) return json(res, 400, { detail: "Rival choices are only available in Hard Mode." });
     const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
     if (!RIVAL_WINDOW_PHASES.has(phaseId)) {
@@ -1437,7 +1487,7 @@ async function handleGameRequest(req, res) {
     room.players[playerIndex] = updatedPlayer;
     room.updated_at = new Date().toISOString();
     await saveRoom(room);
-    return json(res, 200, { room: publicRoom(room) });
+    return json(res, 200, { room: publicRoom(room, viewer) });
   }
 
   if (req.method === "POST" && parts[2] === "advance") {

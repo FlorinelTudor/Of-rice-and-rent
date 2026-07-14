@@ -443,13 +443,42 @@ function roomCode() {
   return code;
 }
 
-function publicRoom(room) {
+function privatePlayer(player) {
+  const { playerToken, ...visible } = player;
+  return visible;
+}
+
+function publicPlayer(player, phaseId) {
+  return {
+    id: player.id,
+    playerName: player.playerName,
+    name: player.name,
+    role: player.role,
+    slot: player.slot,
+    score: player.score,
+    gameOver: player.gameOver || null,
+    submitted: (player.choices?.[phaseId] || []).length === 2,
+  };
+}
+
+function roomViewer(req, room) {
+  const hostToken = req.query?.host_token || req.body?.host_token;
+  if (hostToken && hostToken === room.host_token) return { host: true };
+  const playerId = req.query?.player_id || req.body?.player_id;
+  const playerToken = req.query?.player_token || req.body?.player_token;
+  const player = room.players.find((candidate) => candidate.id === playerId && candidate.playerToken === playerToken);
+  return player ? { playerId: player.id } : {};
+}
+
+function publicRoom(room, viewer = {}) {
   const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
   const scenario = { ...scenarioById(room.scenario_id), hardMode: Boolean(room.hard_mode) };
   return {
     roomCode: room.room_code,
     phaseIndex: room.phase_index,
-    players: room.players || [],
+    players: (room.players || []).map((player) =>
+      viewer.host || viewer.playerId === player.id ? privatePlayer(player) : publicPlayer(player, phaseId)
+    ),
     scenario,
     rematchScenario: room.phase_index >= PHASE_IDS.length - 1 ? rematchScenario(scenario.id) : null,
     nextRoomCode: room.next_room_code || null,
@@ -477,6 +506,7 @@ function pickFamily(playerName, index, clientId, overrides = null) {
     id: crypto.randomUUID(),
     playerName,
     clientId: clientId || crypto.randomUUID(),
+    playerToken: crypto.randomBytes(32).toString("base64url"),
     choices: {},
     score: 0,
     slot: index,
@@ -1046,7 +1076,7 @@ app.post("/api/game/rooms", (req, res) => {
 
 app.get("/api/game/rooms/:roomCode", (req, res) => {
   const room = getRoom(req, res);
-  if (room) res.json({ room: publicRoom(room) });
+  if (room) res.json({ room: publicRoom(room, roomViewer(req, room)) });
 });
 
 app.post("/api/game/rooms/:roomCode/join", (req, res) => {
@@ -1055,7 +1085,8 @@ app.post("/api/game/rooms/:roomCode/join", (req, res) => {
   const clientId = req.body.client_id || crypto.randomUUID();
   const existing = room.players.find((player) => player.clientId === clientId);
   if (existing) {
-    res.json({ room: publicRoom(room), playerId: existing.id });
+    if (!existing.playerToken) existing.playerToken = crypto.randomBytes(32).toString("base64url");
+    res.json({ room: publicRoom(room, { playerId: existing.id }), playerId: existing.id, playerToken: existing.playerToken });
     return;
   }
   if (room.players.length >= MAX_PLAYERS) {
@@ -1067,12 +1098,17 @@ app.post("/api/game/rooms/:roomCode/join", (req, res) => {
   room.players.push(player);
   applyCollapseChecks(room, PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)], { allowGameOver: false });
   room.updated_at = new Date().toISOString();
-  res.json({ room: publicRoom(room), playerId: player.id });
+  res.json({ room: publicRoom(room, { playerId: player.id }), playerId: player.id, playerToken: player.playerToken });
 });
 
 app.post("/api/game/rooms/:roomCode/policy-vote", (req, res) => {
   const room = getRoom(req, res);
   if (!room) return;
+  const viewer = roomViewer(req, room);
+  if (viewer.playerId !== req.body.player_id) {
+    res.status(403).json({ detail: "A valid player token is required to vote." });
+    return;
+  }
   const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
   const policy = policyVoteForPhase(phaseId);
   const player = room.players.find((candidate) => candidate.id === req.body.player_id && !candidate.gameOver);
@@ -1117,7 +1153,7 @@ app.post("/api/game/rooms/:roomCode/policy-vote", (req, res) => {
     applyCollapseChecks(room, phaseId, { allowGameOver: false });
   }
   room.updated_at = new Date().toISOString();
-  res.json({ room: publicRoom(room) });
+  res.json({ room: publicRoom(room, viewer) });
 });
 
 app.post("/api/game/rooms/:roomCode/policy-demo-votes", (req, res) => {
@@ -1178,6 +1214,11 @@ app.post("/api/game/rooms/:roomCode/policy-demo-votes", (req, res) => {
 app.post("/api/game/rooms/:roomCode/town-hall-claim", (req, res) => {
   const room = getRoom(req, res);
   if (!room) return;
+  const viewer = roomViewer(req, room);
+  if (viewer.playerId !== req.body.player_id) {
+    res.status(403).json({ detail: "A valid player token is required to place a priority." });
+    return;
+  }
   const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
   const claim = String(req.body.claim || "");
   const player = room.players.find((candidate) => candidate.id === req.body.player_id && !candidate.gameOver);
@@ -1190,7 +1231,7 @@ app.post("/api/game/rooms/:roomCode/town-hall-claim", (req, res) => {
   room.town_hall_claims[phaseId][player.id] = claim;
   player.provisionalClaims = { ...(player.provisionalClaims || {}), [phaseId]: claim };
   room.updated_at = new Date().toISOString();
-  res.json({ room: publicRoom(room) });
+  res.json({ room: publicRoom(room, viewer) });
 });
 
 app.post("/api/game/rooms/:roomCode/town-hall-demo-claims", (req, res) => {
@@ -1219,6 +1260,11 @@ app.post("/api/game/rooms/:roomCode/town-hall-demo-claims", (req, res) => {
 app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
   const room = getRoom(req, res);
   if (!room) return;
+  const viewer = roomViewer(req, room);
+  if (viewer.playerId !== req.body.player_id) {
+    res.status(403).json({ detail: "A valid player token is required to submit decisions." });
+    return;
+  }
   const phaseId = PHASE_IDS[Math.min(room.phase_index, PHASE_IDS.length - 1)];
   const policy = policyVoteForPhase(phaseId);
   if (policy && !room.policy_votes?.[phaseId]?.result?.resolved) {
@@ -1237,7 +1283,7 @@ app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
     return;
   }
   if (room.players[index].gameOver) {
-    res.json({ room: publicRoom(room) });
+    res.json({ room: publicRoom(room, viewer) });
     return;
   }
   if ((room.players[index].choices?.[phaseId] || []).length !== 2) {
@@ -1270,12 +1316,17 @@ app.post("/api/game/rooms/:roomCode/choices", (req, res) => {
     }
     room.updated_at = new Date().toISOString();
   }
-  res.json({ room: publicRoom(room) });
+  res.json({ room: publicRoom(room, viewer) });
 });
 
 app.post("/api/game/rooms/:roomCode/rival", (req, res) => {
   const room = getRoom(req, res);
   if (!room) return;
+  const viewer = roomViewer(req, room);
+  if (viewer.playerId !== req.body.player_id) {
+    res.status(403).json({ detail: "A valid player token is required to nominate a rival." });
+    return;
+  }
   if (!room.hard_mode) {
     res.status(400).json({ detail: "Rival choices are only available in Hard Mode." });
     return;
@@ -1314,7 +1365,7 @@ app.post("/api/game/rooms/:roomCode/rival", (req, res) => {
     ],
   };
   room.updated_at = new Date().toISOString();
-  res.json({ room: publicRoom(room) });
+  res.json({ room: publicRoom(room, viewer) });
 });
 
 app.post("/api/game/rooms/:roomCode/advance", (req, res) => {
