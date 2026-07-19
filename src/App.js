@@ -2524,15 +2524,35 @@ function TownHallCouncil({ shared, playerCount = 0, players = [], phaseId, famil
   return (
     <div className="town-hall-council">
       <header className="council-masthead">
-        <div><p className="gd-kicker">Municipal planning ledger</p><h2>Town Hall Council</h2></div>
-        <span className="council-risk-stamp">{townHall.dangerCount} {townHall.dangerCount === 1 ? "family" : "families"} at risk</span>
+        <div>
+          <p className="gd-kicker">Town Hall</p>
+          <h2>Town Hall Council</h2>
+        </div>
+        {townHall.dangerCount > 0 && (
+          <span className="council-risk-stamp">{townHall.dangerCount} {townHall.dangerCount === 1 ? "family" : "families"} at risk</span>
+        )}
       </header>
       <div className="council-scarcity" aria-label="Town scarcity">
-        <div className={workScarce ? "scarce" : ""}><span>Work slots</span><strong>{current.workSlots}</strong><small>{workScarce ? `for ${familiesCompeting} families` : "available"}</small></div>
-        <div className={reliefScarce ? "scarce" : ""}><span>Relief slots</span><strong>{current.reliefSlots}</strong><small>{reliefScarce ? `for ${familiesCompeting} families` : "available"}</small></div>
-        <div className={potStatus}><span>Community pot</span><strong>{current.communityPot}/{current.communityNeed}</strong><small>contributed / need</small></div>
+        <div className={workScarce ? "scarce" : ""}>
+          <span>Work slots</span>
+          <strong>{current.workSlots}</strong>
+          <small>{workScarce ? `short of ${familiesCompeting}` : ""}</small>
+        </div>
+        <div className={reliefScarce ? "scarce" : ""}>
+          <span>Relief slots</span>
+          <strong>{current.reliefSlots}</strong>
+          <small>{reliefScarce ? `short of ${familiesCompeting}` : ""}</small>
+        </div>
+        <div className={potStatus}>
+          <span>Community pot</span>
+          <strong>{current.communityPot}/{current.communityNeed}</strong>
+          <small />
+        </div>
       </div>
-      <div className="council-progress"><span>{townHall.claimsReceived} of {townHall.eligibleCount} priorities placed</span><i><b style={{ width: `${townHall.eligibleCount ? townHall.claimsReceived / townHall.eligibleCount * 100 : 0}%` }} /></i></div>
+      <div className="council-progress">
+        <span>{townHall.claimsReceived} of {townHall.eligibleCount} priorities placed</span>
+        <i><b style={{ width: `${townHall.eligibleCount ? townHall.claimsReceived / townHall.eligibleCount * 100 : 0}%` }} /></i>
+      </div>
       <div className="council-body">
         <div className="council-claims" aria-label="Provisional priorities">
           {CLAIM_OPTIONS.map(([id, title, focus, image]) => (
@@ -2545,7 +2565,6 @@ function TownHallCouncil({ shared, playerCount = 0, players = [], phaseId, famil
               aria-pressed={selection === id}
             >
               <img src={asset(image)} alt="" />
-              <span>Intention</span>
               <strong>{title}</strong>
               <small>{townHall.resolved ? `${townHall.counts[id]} ${townHall.counts[id] === 1 ? "family" : "families"}` : focus}</small>
             </button>
@@ -2553,7 +2572,10 @@ function TownHallCouncil({ shared, playerCount = 0, players = [], phaseId, famil
         </div>
       </div>
       <aside className="council-private-note council-private-note-wide">
-        <div><span>Private · family exposure</span><strong>{family?.name ? `${family.name} Family` : "Family notice"}</strong></div>
+        <div>
+          <span>Private · family exposure</span>
+          <strong>{family?.name ? `${family.name} Family` : "Family notice"}</strong>
+        </div>
         <p>{familyExposure(family)}</p>
         <small>Claims are provisional and carry no penalty. Room totals reveal together.</small>
       </aside>
