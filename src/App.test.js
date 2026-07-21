@@ -535,4 +535,26 @@ describe("staged tabletop experience", () => {
     await act(async () => decisionButton.click());
     expect(container.querySelector(".gd-choice-grid")).not.toBeNull();
   });
+
+  test("polls a host-assigned demo family so the server can return that hand", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ room: { ...room, availableActions: postwarActions } }),
+    });
+    window.localStorage.setItem("gd-game-state", JSON.stringify({
+      ...savedPlayerState(),
+      view: "host",
+      hostToken: "host-test-token",
+      activePlayerId: player.id,
+      availableActions: [],
+    }));
+
+    await act(async () => root.render(<App />));
+    await act(async () => {});
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining(`active_player_id=${encodeURIComponent(player.id)}`),
+      expect.any(Object)
+    );
+  });
 });

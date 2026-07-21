@@ -1244,7 +1244,7 @@ function App() {
     const pullRoom = async () => {
       try {
         const credentials = view === "host" && hostToken
-          ? `?host_token=${encodeURIComponent(hostToken)}`
+          ? `?host_token=${encodeURIComponent(hostToken)}${activePlayerId ? `&active_player_id=${encodeURIComponent(activePlayerId)}` : ""}`
           : activePlayerId && playerToken
             ? `?player_id=${encodeURIComponent(activePlayerId)}&player_token=${encodeURIComponent(playerToken)}`
             : "";
@@ -1396,7 +1396,13 @@ function App() {
     const data = await runGameRequest(() =>
       gameApi(`/game/rooms/${roomCode}/rival`, {
         method: "POST",
-        body: JSON.stringify({ player_id: activePlayer.id, player_token: playerToken, rival_id: rivalId }),
+        body: JSON.stringify({
+          player_id: activePlayer.id,
+          player_token: playerToken,
+          host_token: view === "host" ? hostToken : undefined,
+          active_player_id: view === "host" ? activePlayer.id : undefined,
+          rival_id: rivalId,
+        }),
       })
     );
     if (!data) return;
@@ -1408,7 +1414,13 @@ function App() {
     const data = await runGameRequest(() =>
       gameApi(`/game/rooms/${roomCode}/choices`, {
         method: "POST",
-        body: JSON.stringify({ player_id: activePlayer.id, player_token: playerToken, choices: selected }),
+        body: JSON.stringify({
+          player_id: activePlayer.id,
+          player_token: playerToken,
+          host_token: view === "host" ? hostToken : undefined,
+          active_player_id: view === "host" ? activePlayer.id : undefined,
+          choices: selected,
+        }),
       })
     );
     if (!data) return;
@@ -1455,7 +1467,7 @@ function App() {
     playTabletopSound("gavel", { enabled: soundEnabled, volume: 0.5 });
     const data = await runGameRequest(() => gameApi(`/game/rooms/${roomCode}/town-hall-demo-claims`, {
       method: "POST",
-      body: JSON.stringify({ host_token: hostToken, claim }),
+      body: JSON.stringify({ host_token: hostToken, active_player_id: activePlayerId, claim }),
     }));
     if (data) syncRoom(data.room);
   }
