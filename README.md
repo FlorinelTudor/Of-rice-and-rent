@@ -1,4 +1,4 @@
-# The Long Downturn
+# Of Rice and Rent
 
 A facilitated multiplayer learning game in which up to nine players manage
 different American families through the economic changes of 1919-1942.
