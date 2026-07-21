@@ -1485,7 +1485,7 @@ function App() {
       <section className="gd-topbar">
         <div>
           <p className="gd-kicker">Main Street, 1919</p>
-          <h1>Rent, Beans and Dreams</h1>
+          <h1>Of Rice and Rent</h1>
         </div>
         <div className="gd-topbar-actions">
           <button
