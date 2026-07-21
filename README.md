@@ -10,6 +10,29 @@ keep that household alive, stable, and competitive while public news, market
 conditions, public policy, and scarce community resources keep changing around
 them.
 
+## Built with Codex and GPT-5.6
+
+Of Rice and Rent was designed and implemented through an iterative collaboration
+with Codex using GPT-5.6. Codex helped turn an initial learning-game idea into a
+playable browser experience by supporting:
+
+- rapid gameplay prototyping and critique across multiple design directions
+- tabletop-style UI exploration, action-card layouts, and historical visual
+  direction
+- image-generation prompts for family portraits, market conditions, public news,
+  action cards, warnings, and end-game scenes
+- multiplayer architecture changes such as server-authoritative room state,
+  player tokens, private family ledgers, and host inspection tools
+- game-theory mechanics including scarce shared resources, public policy votes,
+  soft and hard competition, rival targeting, anti-rush penalties, and final
+  historical debriefs
+- implementation, testing, local smoke tests, deployment debugging, and GitHub
+  workflow support
+
+The project is a practical example of using Codex not just to write code, but to
+co-design mechanics, tune player experience, investigate bugs, and keep the
+prototype moving from idea to live playtest.
+
 ## What players do
 
 Players are not told the future. They see a newspaper, market conditions, and
@@ -136,6 +159,10 @@ facilitation and troubleshooting.
 The multiplayer layer uses authenticated HTTP polling and server-owned room
 state rather than WebSockets. Hosted room state is stored through the selected
 server backend; local playtests use the local Express process.
+
+Codex assisted with the migration toward this server-authoritative model by
+centralizing action rules, moving private player state behind authenticated
+views, and adding tests for multiplayer privacy and host-demo playtest flows.
 
 ## Local playtest
 
