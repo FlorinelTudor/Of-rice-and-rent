@@ -395,7 +395,11 @@ function publicPlayer(player, phaseId) {
 
 function roomViewer(req, room) {
   const hostToken = req.query?.host_token || req.body?.host_token;
-  if (hostToken && hostToken === room.host_token) return { host: true };
+  if (hostToken && hostToken === room.host_token) {
+    const activePlayerId = req.query?.active_player_id || req.body?.active_player_id;
+    const activePlayer = room.players.find((candidate) => candidate.id === activePlayerId);
+    return activePlayer ? { host: true, playerId: activePlayer.id } : { host: true };
+  }
   const playerId = req.query?.player_id || req.body?.player_id;
   const playerToken = req.query?.player_token || req.body?.player_token;
   const player = room.players.find((candidate) => candidate.id === playerId && candidate.playerToken === playerToken);
